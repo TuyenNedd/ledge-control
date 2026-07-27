@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Copied verbatim into dist/Ledge.app/Contents/Info.plist by `make app`.
+
+  CFBundleIdentifier is fixed and must stay that way. macOS keys Accessibility permission to
+  bundle identity, so a generated or changing identifier would mean re-granting permission in
+  Privacy & Security after every rebuild.
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Ledge</string>
+	<key>CFBundleExecutable</key>
+	<string>Ledge</string>
+	<key>CFBundleIdentifier</key>
+	<string>xyz.tuyennedd.ledge</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Ledge</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<!-- A menu bar app: no Dock icon, no app menu. main.swift sets the matching activation
+	     policy so that `swift run` behaves the same way without a bundle. -->
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Tuyen Nguyen. MIT licensed.</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+</dict>
+</plist>
