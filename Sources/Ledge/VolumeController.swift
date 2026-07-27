@@ -61,6 +61,18 @@ final class VolumeController: VolumeAdjusting {
 /// draw. Offered in the menu for anyone who prefers precision to feedback.
 final class CoreAudioVolumeController: VolumeAdjusting {
     func adjust(_ direction: StepDirection, fine: Bool) {
+        // Raising the volume of a muted device produces a larger silence. Clearing mute on the way
+        // up is normalising what "louder" means, not a decision: nobody slides upward in order to
+        // stay silent, and the recourse otherwise is the hardware key this app exists to replace.
+        // Sliding *down* deliberately leaves mute alone — muting is a state the user chose and a
+        // downward step is not a request to leave it.
+        //
+        // The media-key backend gets this for free: the OS unmutes on volume-up itself, because it
+        // is the OS. One more reason it is the default, alongside the HUD.
+        if direction == .up {
+            CoreAudioOutput.clearMute()
+        }
+
         guard let current = CoreAudioOutput.volumeScalar() else { return }
         let delta = SystemStepFraction.delta(fine: fine)
         let signed = direction == .up ? delta : -delta
@@ -83,6 +95,14 @@ enum CoreAudioOutput {
     /// The main element is a device-wide control and is what most built-in outputs expose. Some
     /// devices expose no main volume and only per-channel controls, so channels 1 and 2 (left
     /// and right for stereo) are tried next. This is a capability probe, not a preference.
+    ///
+    /// UNVERIFIED: that the built-in output exposes a readable `kAudioDevicePropertyVolumeScalar`
+    /// on the main element at all. Built-in speakers commonly expose only per-channel controls, in
+    /// which case the main-element path never executes and every read and write here lands on
+    /// channels 1 and 2 — which for a write means `setVolumeScalar` flattens any deliberate
+    /// left/right imbalance, and if a device exposed *neither*, `volumeScalar()` returns nil, the
+    /// CoreAudio backend does nothing at all, and the diagnostics window reads the volume as
+    /// `unavailable` while the media-key backend keeps working.
     private static let candidateElements: [AudioObjectPropertyElement] = [
         kAudioObjectPropertyElementMain, 1, 2,
     ]
@@ -114,6 +134,54 @@ enum CoreAudioOutput {
         for element in candidateElements where element != kAudioObjectPropertyElementMain {
             _ = write(value, to: device, element: element)
         }
+    }
+
+    /// Unmute the default output device, if it has a mute control anywhere.
+    ///
+    /// Writes 0 rather than reading the current state first: a write of 0 to something already 0
+    /// is a no-op, so the read would buy nothing but another way to fail. Existence is probed the
+    /// same way as volume — attempt the call, inspect the `OSStatus` — for the same reason: it
+    /// keeps this file to CoreAudio calls returning an unambiguous `Int32` and away from ones
+    /// returning the C `Boolean` type, whose Swift spelling differs between SDK versions.
+    ///
+    /// `kAudioDevicePropertyMute` carries a `UInt32`, 1 for muted and 0 for not, which is why this
+    /// is written as an integer and not as any kind of boolean.
+    static func clearMute() {
+        guard let device = defaultOutputDevice() else { return }
+
+        // Main element first, for the same reason as `setVolumeScalar`: a device-wide control is
+        // one write instead of two. Falling through to the channels covers devices that expose
+        // mute per channel only. Both are attempted rather than assumed, and a device with no
+        // mute control at all simply fails every write — which is the correct outcome, since
+        // there is then nothing to clear.
+        if writeMute(0, to: device, element: kAudioObjectPropertyElementMain) { return }
+        for element in candidateElements where element != kAudioObjectPropertyElementMain {
+            _ = writeMute(0, to: device, element: element)
+        }
+    }
+
+    /// - Returns: whether the write succeeded, so the caller can fall through to another element.
+    @discardableResult
+    private static func writeMute(
+        _ value: UInt32,
+        to device: AudioDeviceID,
+        element: AudioObjectPropertyElement
+    ) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyMute,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: element
+        )
+        var value = value
+        let status = AudioObjectSetPropertyData(
+            device,
+            &address,
+            0,
+            nil,
+            UInt32(MemoryLayout<UInt32>.size),
+            &value
+        )
+        return status == noErr
     }
 
     private static func read(from device: AudioDeviceID, element: AudioObjectPropertyElement) -> Float? {
