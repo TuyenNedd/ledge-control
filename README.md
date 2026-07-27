@@ -20,8 +20,8 @@ It was written in a Linux sandbox with no macOS, no AppKit, no Xcode, and no App
 
 Expect the first `make app` to produce compile errors. They should be small — wrong argument
 labels, deprecations — but they will be there. Search the source for `// UNVERIFIED:` to find
-every assumption that was made without being able to check it; there are ten, and three of them
-are load-bearing.
+every assumption that was made without being able to check it; there are thirteen, and the
+load-bearing ones are in `EventTapTouchSource.swift`.
 
 The single question that decides whether any of this works is on-device checklist item 1 below:
 does a `CGEvent` tap actually deliver single-finger trackpad touches? Everything else is
@@ -44,13 +44,32 @@ Then launch it from `/Applications`, grant Accessibility permission when asked, 
 `make run` launches the bundle. Do not use `swift run` — a bare binary has no bundle identity, so
 it can never hold the Accessibility permission the app depends on.
 
-Other targets: `make build`, `make test`, `make clean`.
+Other targets: `make build`, `make test`, `make reset-permission`, `make clean`.
 
 ### Why a bundle and not just a binary
 
 Accessibility permission is granted to a *bundle identity*, not to a file. `Resources/Info.plist`
-pins `CFBundleIdentifier` to `xyz.tuyennedd.ledge` and never changes it, so the grant survives a
-rebuild instead of having to be re-approved every time.
+pins `CFBundleIdentifier` to `xyz.tuyennedd.ledge` and never changes it, which is the minimum
+required for the app to be able to hold the grant at all.
+
+### Expect to re-grant permission after every rebuild
+
+A fixed bundle identifier is not enough. macOS matches the *designated requirement* of the
+signature, and for the ad-hoc signature `make app` applies that requirement is derived from the
+binary's hash — so a rebuilt app is, as far as permissions are concerned, a different program.
+
+The symptom is worse than a refusal: the app keeps its enabled checkbox in **Privacy & Security >
+Accessibility** while the grant does nothing, and `CGEvent.tapCreate` returns nil. That is
+indistinguishable from the event tap simply not working, so rule it out first:
+
+```bash
+make reset-permission   # tccutil reset Accessibility xyz.tuyennedd.ledge
+```
+
+Quit the app, run that, relaunch, grant again. To avoid it entirely without a paid Developer
+account, sign with a stable self-signed code-signing certificate from Keychain Access instead of
+ad-hoc — an unchanging certificate gives an unchanging designated requirement. See the Makefile
+header.
 
 ---
 
@@ -61,18 +80,26 @@ was written blind — it turns each unverifiable assumption into something you c
 
 Work down this list in order. If step 1 fails, nothing below it matters.
 
-- [ ] **1. Does the event tap deliver touches?** Rest one finger on the trackpad and watch
-      *Gesture frames seen* and *Touch count*.
-      - Both climbing → the core assumption holds, carry on.
-      - Frames climbing, touch count stuck at 0 → gesture events arrive without touch data.
-      - Frames stuck at 0 → no gesture events at all.
-
-      Either of the last two means the public event tap route is dead and the private
-      `MultitouchSupport.framework` is the only remaining option. `TouchSource` is the seam that
-      substitution happens at.
+- [ ] **1. Does the event tap deliver touches?** Move the pointer, then rest one finger on the
+      trackpad, and read *Events seen (all types)*, *Gesture frames seen* and *Touch count*
+      together. The tap subscribes to every event type precisely so these three tell three
+      different failures apart:
+      - All three climbing → the core assumption holds, carry on.
+      - **Events seen 0** → the tap delivers nothing whatsoever. This is permission or
+        `tapCreate`, not gestures. Quit, `make reset-permission`, relaunch, grant again — and only
+        then suspect anything else.
+      - **Events climbing, gesture frames 0** → the tap works but type 29 never arrives. The
+        public event tap route is dead and the private `MultitouchSupport.framework` is the only
+        remaining option. `TouchSource` is the seam that substitution happens at.
+      - **Gesture frames climbing, touch count 0** → gesture events arrive without touch data
+        attached. Same conclusion as above.
 - [ ] **2. Are touch ids stable?** With one finger held down, *Raw touch ids* must not change.
       `LedgeCore` matches fingers between frames by `NSTouch.identity.hash`; if that hash changes
       per frame, every frame looks like a new finger and both arming and stepping break silently.
+- [ ] **2b. Does lifting a finger empty the frame?** Lift your finger and watch *Touch count* fall
+      back to 0. An empty frame is how `LedgeCore` learns the gesture ended; if the count sticks
+      at 1, the phase filter in `EventTapTouchSource.emitFrame` is not working, gestures only end
+      on the stale-gesture timeout, and cursor freeze strands the pointer in the meantime.
 - [ ] **3. Volume responds.** Slide the right edge. Volume should change *and* the system HUD
       should appear.
 - [ ] **4. Is fine control real?** Watch *Volume scalar* while stepping.
@@ -87,8 +114,9 @@ Work down this list in order. If step 1 fails, nothing below it matters.
       afterwards.
 - [ ] **8. False positives.** Use the machine normally for a day — scroll, type, drag. Count
       unintended changes. This is the real test; see Tuning.
-- [ ] **9. Permission persistence.** Rebuild, relaunch, check whether Accessibility had to be
-      re-granted.
+- [ ] **9. Permission after a rebuild.** Rebuild, relaunch, and confirm the app still works.
+      Expect it not to, with an ad-hoc signature: run `make reset-permission` and grant again. If
+      re-granting is needed every time, a stable self-signed certificate is the fix.
 
 ---
 
@@ -155,6 +183,20 @@ Full reasoning, including the rejected alternatives, is in [`docs/DESIGN.md`](do
 - **No custom HUD.** The app relies on the system indicator. If step 5 above shows no indicator
   for brightness, one is needed.
 - **External displays are out of scope.** Built-in only; no DDC.
+- **The Accessibility grant does not survive a rebuild** while the app is ad-hoc signed, and the
+  app looks enabled while it isn't. `make reset-permission` after each build, or sign with a stable
+  self-signed certificate. See "Expect to re-grant permission after every rebuild" above.
+- **The event tap subscribes to every event type**, because per-type subscription is reported not
+  to be honoured for gesture events. That means the tap callback runs for every event in the
+  session. It does nothing but count and return for types it ignores, but if the tap starts being
+  disabled by timeout under load, the narrow mask is kept commented in
+  `EventTapTouchSource.swift` as the thing to try.
+- **Touch ids are only assumed unique among fingers currently down.** After a finger lifts, the OS
+  could in principle give a later finger the same id. Nothing exploits that today — a rejected or
+  engaged id is only consulted while it keeps appearing in frames — but it is why the diagnostics
+  window prints raw ids.
+- **The CoreAudio backend clears mute on the way up only.** Sliding down on a muted device leaves
+  it muted, deliberately. The media-key backend gets mute handling from the OS.
 
 ---
 

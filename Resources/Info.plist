@@ -3,9 +3,16 @@
 <!--
   Copied verbatim into dist/Ledge.app/Contents/Info.plist by `make app`.
 
-  CFBundleIdentifier is fixed and must stay that way. macOS keys Accessibility permission to
-  bundle identity, so a generated or changing identifier would mean re-granting permission in
-  Privacy & Security after every rebuild.
+  CFBundleIdentifier is fixed and must stay that way: a bare binary has no bundle identity at
+  all, and a generated identifier would give the app a different one on every build, so
+  Accessibility permission could never be held for longer than one launch.
+
+  A fixed identifier is necessary but NOT sufficient for the grant to survive a rebuild. TCC
+  matches on the designated requirement, which for the ad-hoc signature `make app` applies is
+  derived from the code directory hash and therefore changes with every build. The visible symptom
+  is the app appearing enabled in Privacy & Security > Accessibility while the grant has no
+  effect and CGEvent.tapCreate still returns nil. `make reset-permission` clears it; a stable
+  self-signed certificate avoids it. See the header comment in the Makefile.
 -->
 <plist version="1.0">
 <dict>

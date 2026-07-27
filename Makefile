@@ -6,9 +6,27 @@
 # depends on. Use `make run`, which launches the assembled bundle instead.
 #
 # The ad-hoc signature (`codesign --sign -`) is the most this can do without a paid Developer
-# account. It is enough for macOS to accept the bundle locally, and combined with the fixed
-# CFBundleIdentifier in Resources/Info.plist it is enough for the Accessibility grant to survive
-# a rebuild.
+# account. It is enough for macOS to accept the bundle locally.
+#
+# It is NOT enough for the Accessibility grant to survive a rebuild, and the fixed
+# CFBundleIdentifier in Resources/Info.plist does not make it so. TCC matches a designated
+# requirement, and for an ad-hoc signature that requirement is derived from the code directory
+# hash — which changes every time the binary changes. So after a rebuild the app is, to TCC, a
+# different program wearing the same name.
+#
+# The symptom is nastier than an outright refusal: the app still appears in
+# Privacy & Security > Accessibility, still shows its checkbox enabled, and the grant does
+# nothing. `CGEvent.tapCreate` returns nil and the app reports no permission while the settings
+# pane insists otherwise. Do not spend time on the event tap before ruling this out — a nil
+# `tapCreate` looks identical to the tap simply not delivering gesture events.
+#
+# When that happens: `make reset-permission`, relaunch, and grant again. Removing the entry by
+# hand with the "-" button in the settings pane does the same job.
+#
+# The way to avoid it altogether, still with no paid account: sign with a stable self-signed
+# code-signing certificate from Keychain Access instead of ad-hoc. A certificate that does not
+# change between builds gives a designated requirement that does not either, so the grant sticks.
+# Swap the `codesign --sign -` below for `codesign --sign "<certificate name>"`.
 
 CONFIG ?= release
 APP_NAME := Ledge
@@ -20,7 +38,9 @@ CONTENTS := $(BUNDLE)/Contents
 # .build/$(CONFIG) is a symlink to, which is more reliable than hard-coding either.
 BIN_DIR = $(shell swift build -c $(CONFIG) --show-bin-path)
 
-.PHONY: all build app install run test clean
+BUNDLE_ID := xyz.tuyennedd.ledge
+
+.PHONY: all build app install run test reset-permission clean
 
 all: app
 
@@ -50,6 +70,16 @@ install: app
 ## Accessibility grant.
 run: app
 	open "$(BUNDLE)"
+
+## Forget the Accessibility decision for this bundle id, so the next launch asks again.
+##
+## Needed after a rebuild, because the ad-hoc signature's designated requirement changes with the
+## binary and TCC keeps matching the old one — see the note at the top of this file. Run this
+## whenever the app claims it has no permission while the settings pane shows it enabled. Quit the
+## app first; then relaunch and grant when prompted.
+reset-permission:
+	tccutil reset Accessibility $(BUNDLE_ID)
+	@echo "Reset Accessibility for $(BUNDLE_ID) — relaunch the app and grant again."
 
 test:
 	swift test
