@@ -15,4 +15,5 @@ Built for macOS 26 Tahoe on Apple Silicon, built-in display only.
 ## Documentation
 
 - [`docs/DESIGN.md`](docs/DESIGN.md) — architecture and the two OS findings that shaped it
-- [`docs/PLAN.md`](docs/PLAN.md) — implementation plan and on-device verification checklist
+- [`docs/plans/2026-07-27-trackpad-edge-gestures.md`](docs/plans/2026-07-27-trackpad-edge-gestures.md)
+  — implementation plan and on-device verification checklist
