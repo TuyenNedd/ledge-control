@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import LedgeCore
@@ -28,13 +29,17 @@ final class GestureController {
     private let touchSource: TouchSource
     private let haptics: Haptics
     private let brightness: BrightnessController
-    private let brightnessHUD: BrightnessHUD
     private let mediaKeyVolume: VolumeAdjusting
     private let coreAudioVolume: VolumeAdjusting
 
     /// Which control a gesture currently owns, if any. Maintained purely by pairing the engine's
     /// `.engaged`/`.disengaged` events, which the engine guarantees come in pairs.
     private(set) var engagedControl: Control?
+
+    /// The cursor position (in AppKit screen coordinates, origin bottom-left) captured at
+    /// engagement. Used to warp the cursor back when the gesture ends, so the user's pointer
+    /// appears stationary throughout the slide.
+    private var cursorPositionAtEngagement: NSPoint?
 
     /// The most recent frame, and how many have arrived. Diagnostics only — nothing in the
     /// gesture path reads these, and the frame counter is what distinguishes "no touches" from
@@ -48,7 +53,6 @@ final class GestureController {
         self.touchSource = touchSource
         self.haptics = Haptics(preferences: preferences)
         self.brightness = BrightnessController()
-        self.brightnessHUD = BrightnessHUD()
         self.mediaKeyVolume = VolumeController()
         self.coreAudioVolume = CoreAudioVolumeController()
         self.engine = GestureEngine(settings: preferences.gestureSettings)
@@ -105,13 +109,25 @@ final class GestureController {
             case .engaged(let control):
                 engagedControl = control
                 if preferences.cursorFreezeEnabled {
-                    CGAssociateMouseAndMouseCursorPosition(0)
+                    // Save the cursor position BEFORE disassociating, so we can restore it
+                    // when the gesture ends. NSEvent.mouseLocation uses bottom-left origin.
+                    cursorPositionAtEngagement = NSEvent.mouseLocation
+                    CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
                 }
             case .disengaged:
-                engagedControl = nil
                 if preferences.cursorFreezeEnabled {
-                    CGAssociateMouseAndMouseCursorPosition(1)
+                    CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
+                    // Warp cursor back to where it was when the gesture started.
+                    // NSEvent.mouseLocation is bottom-left origin; CGWarpMouseCursorPosition
+                    // uses top-left origin, so y must be flipped.
+                    if let pos = cursorPositionAtEngagement,
+                       let screen = NSScreen.main {
+                        let flipped = CGPoint(x: pos.x, y: screen.frame.height - pos.y)
+                        CGWarpMouseCursorPosition(flipped)
+                    }
                 }
+                engagedControl = nil
+                cursorPositionAtEngagement = nil
             case .step(let control, let direction):
                 perform(control, direction)
                 stepCount += 1
@@ -134,9 +150,14 @@ final class GestureController {
         case .volume: volumeBackend.adjust(direction, fine: fine)
         case .brightness:
             brightness.adjust(direction, fine: fine)
-            if let level = brightness.currentBrightness() {
-                brightnessHUD.show(brightness: level)
-            }
+            // After DisplayServices sets the brightness, post a brightness media key event.
+            // This may trigger the native brightness indicator on macOS 26 Tahoe, similar to
+            // how volume media keys trigger the native volume HUD.
+            // UNVERIFIED: if this does not produce a native indicator, a custom HUD may need
+            // to be restored. The media key alone (without DisplayServices) might also work as
+            // the primary control on newer macOS versions.
+            let key: MediaKey = direction == .up ? .brightnessUp : .brightnessDown
+            MediaKeySender.post(key, fine: fine)
         }
     }
 
@@ -156,7 +177,6 @@ final class GestureController {
     var isUsingCoreAudioVolume: Bool { preferences.useCoreAudioVolume }
     var isCursorLocked: Bool { engagedControl != nil && preferences.cursorFreezeEnabled }
     var hapticPulseCount: Int { haptics.pulseCount }
-    var brightnessHUDShowCount: Int { brightnessHUD.showCount }
 
     func currentVolumeScalar() -> Float? { volumeBackend.currentScalar() }
     func currentBrightness() -> Float? { brightness.currentBrightness() }

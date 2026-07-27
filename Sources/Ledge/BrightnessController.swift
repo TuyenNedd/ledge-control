@@ -82,9 +82,9 @@ final class BrightnessController {
 
         guard setBrightness(display, target) == 0 else { return }
 
-        // Still called for legacy compatibility, but no longer relied upon for the indicator.
-        // On macOS 26 Tahoe this call is inert (OSDUIHelper was removed). The custom
-        // BrightnessHUD in GestureController provides the visual feedback instead.
+        // Still called for legacy compatibility. On macOS 26 Tahoe this call is inert
+        // (OSDUIHelper was removed). The native brightness indicator is now attempted via
+        // synthesised media key events posted by GestureController after this set call.
         _ = brightnessChanged?(display, Double(target))
     }
 
