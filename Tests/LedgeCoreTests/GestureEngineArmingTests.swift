@@ -96,5 +96,8 @@ func slowStrokeStillEngages() {
     for i in 1...5 {
         events += engine.process(frame: frame(Double(i) * 0.02, 0.02, 0.40 + Double(i) * 0.01))
     }
-    #expect(events == [.engaged(.brightness)])
+    #expect(events.first == .engaged(.brightness))
+    // Once, not once per frame: engaging is a transition, and an adapter that opened a control
+    // twice would owe two closes.
+    #expect(events.filter { $0 == .engaged(.brightness) }.count == 1)
 }

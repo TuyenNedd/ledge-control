@@ -32,6 +32,9 @@ public struct GestureEngine: Sendable {
     /// theoretical only: changing a setting means using the menu, which means using the
     /// trackpad, which means the gesture has already ended.
     public mutating func process(frame: TouchFrame) -> [GestureEvent] {
+        // An empty frame is the finger leaving the trackpad, which is how gestures normally
+        // end.
+        if frame.touches.isEmpty { return end() }
         // Exactly one finger, or there is nothing to interpret. Two-finger scrolling crosses
         // the edge constantly.
         guard frame.touches.count == 1 else { return [] }
@@ -44,11 +47,28 @@ public struct GestureEngine: Sendable {
             return []
         case .armed(let arming) where arming.touchID == touch.id:
             return activate(arming, at: touch)
+        case .engaged(let engagement) where engagement.touchID == touch.id:
+            var engagement = engagement
+            let events = engagement.advance(to: touch.position.y)
+            phase = .engaged(engagement)
+            return events
         case .engaged:
             return []
         case .idle, .armed, .rejected:
             return arm(touch)
         }
+    }
+
+    /// End whatever is in flight, reporting it only if it had been announced.
+    ///
+    /// Every exit from `engaged` routes through here, so there is one place responsible for the
+    /// `.engaged`/`.disengaged` pairing the adapter relies on, and calling it twice is harmless.
+    private mutating func end() -> [GestureEvent] {
+        defer { phase = .idle }
+        if case .engaged(let engagement) = phase {
+            return [.disengaged(engagement.control)]
+        }
+        return []
     }
 
     /// Decide whether a newly seen finger could become a gesture at all.
@@ -80,8 +100,19 @@ public struct GestureEngine: Sendable {
         }
 
         let control = settings.control(for: arming.edge)
-        phase = .engaged(Engagement(touchID: touch.id, control: control))
-        return [.engaged(control)]
+        // Steps are counted from where the finger *started*, not from here, so the travel spent
+        // clearing the dead zone is not thrown away. Since the dead zone is wider than a step
+        // by default, that means at least one step is already due and goes out in this same
+        // frame — recognition and first feedback arrive together.
+        var engagement = Engagement(
+            touchID: touch.id,
+            control: control,
+            settings: settings,
+            baseY: arming.start.y
+        )
+        let steps = engagement.advance(to: touch.position.y)
+        phase = .engaged(engagement)
+        return [.engaged(control)] + steps
     }
 
     private enum Phase: Sendable {
@@ -108,5 +139,52 @@ public struct GestureEngine: Sendable {
     private struct Engagement: Sendable {
         let touchID: Int
         let control: Control
+        /// The rules this gesture was recognised under, kept so a menu change mid-slide cannot
+        /// change the size of a step or which control the closing `.disengaged` names.
+        let settings: GestureSettings
+        /// Where the finger started, in trackpad heights — the origin the step count is
+        /// measured from.
+        let baseY: Double
+        /// Steps emitted so far, signed, up positive.
+        ///
+        /// The anchor is stored as this integer over a fixed origin rather than as a running
+        /// `Double`, because advancing a `Double` by `+= 0.016` fifty times accumulates enough
+        /// error to lose a step over one full-height slide — which is precisely the drift the
+        /// anchor exists to prevent. An integer count cannot drift at all.
+        var stepIndex: Int = 0
+
+        /// Emit one step per whole step of travel between the anchor and `y`.
+        ///
+        /// The anchor — the position that produced the last step — is `baseY + stepIndex *
+        /// stepDistance`. It is never materialised as a stored value; the comparison is done in
+        /// step units instead, which is the same thing without the accumulated error.
+        ///
+        /// Reversing direction costs a full step from the anchor before anything is emitted, so
+        /// a finger resting on a boundary cannot rattle between up and down. Since the anchor
+        /// may already sit a step away from the finger, a deliberate reversal can cost up to two
+        /// steps of travel — the price of never pulsing for movement the user did not make.
+        mutating func advance(to y: Double) -> [GestureEvent] {
+            let travelInSteps = (y - baseY) / settings.effectiveStepDistance
+            // One guard covers both ways this can be unanswerable: a step distance of zero
+            // makes it infinite, and an unclamped position makes it astronomical. Neither is a
+            // gesture, so the frame is ignored while the gesture stays open — that keeps the
+            // `.engaged`/`.disengaged` pairing intact, where trapping or allocating a
+            // billion-element array in the middle of the user's slide would not.
+            guard let stepsBelow = Int(exactly: travelInSteps.rounded(.down)),
+                  let stepsAbove = Int(exactly: travelInSteps.rounded(.up))
+            else { return [] }
+
+            if stepsBelow > stepIndex {
+                let count = stepsBelow - stepIndex
+                stepIndex = stepsBelow
+                return Array(repeating: .step(control, .up), count: count)
+            }
+            if stepsAbove < stepIndex {
+                let count = stepIndex - stepsAbove
+                stepIndex = stepsAbove
+                return Array(repeating: .step(control, .down), count: count)
+            }
+            return []
+        }
     }
 }
