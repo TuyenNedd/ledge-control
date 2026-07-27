@@ -52,6 +52,35 @@ verified by a command whose output was read.
 |---|---|---|
 | `brainstorming` | Design was not validated section-by-section with the user | The user explicitly delegated all decisions and left. Design is recorded in `docs/DESIGN.md` for review after the fact. |
 | `using-git-worktrees` | Work happens on branch `feat/trackpad-edge-gestures`, not a worktree | The sandbox holds one freshly cloned repo with no concurrent work and no dirty state. A branch provides the isolation a worktree would provide here. |
+| `subagent-driven-development` | Tasks 4-6 were implemented in one dispatch rather than three | All three modify `GestureEngine.swift`. The skill's own decision tree routes tightly coupled tasks away from per-task subagents, so splitting them would have been the less faithful choice. |
+| `subagent-driven-development` | Tasks 7-12 were implemented in one dispatch, and the two review stages were combined into single dispatches from Task 3 onward | Nothing in `Sources/Ledge/` can be compile-checked, so splitting files that call each other across separate agents would introduce signature drift that no tool would catch. Both review stages still ran, in order, by an agent with fresh context and instructions to distrust the implementer's report. |
+
+## Status
+
+Tasks 1-13 are written. `LedgeCore` is verified by 54 passing tests. **`Sources/Ledge/` has never
+been compiled** — see the on-device checklist, which is the only thing that can move those tasks
+from "written" to "working."
+
+## Follow-ups found during implementation
+
+Recorded rather than silently fixed, because each changes a decision this plan made.
+
+1. **Two-finger scroll ending in one finger can arm a gesture.** When a multi-touch frame arrives
+   the engine resets to `idle`, so if the user lifts the second finger while the first keeps
+   sliding at the edge, that first finger arms *from where it now is* — it never "started" in the
+   band, and the engine can no longer tell. The same applies after a `gestureTimeout` restart.
+   Fixing it means remembering rejected ids as a set, which changes the `rejected(touchID:)`
+   shape this plan specifies. **Most likely false positive in day-one use.**
+2. **A full-height slide spans ~62.5 steps, not 64,** because `stepDistance` is `0.016` rather
+   than `1.0/64`. The top of the range is not reachable in one stroke. Confirm on device whether
+   this matters before changing it.
+3. **`activationDistance` is only ~1.25 steps,** so any recognised gesture moves the control at
+   least one step. If resting a finger proves to nudge the volume, raise `activationDistance` —
+   the relational test permits up to 3 steps of dead zone, so a retune will not fight the tests.
+4. **The clock contract is documented but not enforced.** A type wrapper was considered and
+   rejected: it would not stop an adapter constructing the wrapper from the wrong clock, so it
+   would add ceremony without closing the hole. `NSEvent.timestamp` is read in exactly two
+   places, both in `EventTapTouchSource`, and `Date()` appears nowhere in the target.
 
 ---
 
