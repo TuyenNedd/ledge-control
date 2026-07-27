@@ -3,6 +3,11 @@
 /// sliding a finger up the trackpad increases `y`.
 ///
 /// The convention is stated once, here, so no other type has to re-derive it.
+///
+/// The 0...1 domain is documented but deliberately **not** validated or clamped. Values
+/// arrive already normalized from the OS, so an out-of-range value means the adapter is
+/// wrong; clamping would quietly absorb that bug instead of letting it show up as visibly
+/// wrong behaviour. Please do not add clamping here.
 public struct NormalizedPoint: Sendable, Equatable {
     /// Distance from the left edge, 0 at the left, 1 at the right.
     public let x: Double
