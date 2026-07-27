@@ -50,10 +50,10 @@ enum MediaKeySender {
     private static func send(_ key: MediaKey, isDown: Bool, fine: Bool) {
         let data1 = (key.rawValue << 16) | (isDown ? keyDownState : keyUpState)
 
-        // UNVERIFIED: `NSEvent.otherEvent(with:)` is documented to return nil for event types
-        // it considers invalid for the "other" family. `.systemDefined` is the type prior art
-        // uses here and is expected to be accepted, but if volume never moves at all, log
-        // whether this returns nil before suspecting anything downstream.
+        // `.systemDefined` is one of the types Apple documents as permitted for
+        // `NSEvent.otherEvent(with:)`, and a disallowed type raises an exception rather than
+        // returning nil — so this is not the suspicious step. The `guard` stays because the
+        // signature is optional, not because nil is expected.
         guard let event = NSEvent.otherEvent(
             with: .systemDefined,
             location: .zero,
@@ -66,9 +66,26 @@ enum MediaKeySender {
             data2: -1
         ) else { return }
 
-        // `.cghidEventTap` posts at the very bottom of the stack, ahead of every session-level
-        // tap — including our own in `EventTapTouchSource`, which is a session tap and therefore
-        // cannot see or be re-entered by what we post here.
+        // Why this cannot feed back into our own event tap.
+        //
+        // Not because of where it is posted. `.cghidEventTap` injects *below* the session level,
+        // which means a session tap — like `EventTapTouchSource`'s — sees the event afterwards, on
+        // its way up. Posting here is the least private route, not a way of hiding.
+        //
+        // The actual protection is the shape of the tap callback. What we post is a
+        // `.systemDefined` event, and `EventTapTouchSource.handle(type:event:)` has no case for
+        // that type: it falls to `default:`, which returns the event untouched and never reaches
+        // the `GestureEngine`. So a synthesised media key cannot produce a touch frame, cannot
+        // produce a step, and cannot cause another post.
+        //
+        // This used to be assured by `.systemDefined` simply not being in the tap's event mask.
+        // It is now — the mask subscribes to every type — so if a case for `.systemDefined` is
+        // ever added to that switch, this loop becomes real. Anything added there must ignore
+        // events it recognises as our own.
+        //
+        // UNVERIFIED: that `event.cgEvent` is non-nil for a `.systemDefined` event built this way.
+        // The bridge back to CoreGraphics is the step with no documented guarantee, and it is
+        // where to look first if volume never moves at all.
         event.cgEvent?.post(tap: .cghidEventTap)
     }
 

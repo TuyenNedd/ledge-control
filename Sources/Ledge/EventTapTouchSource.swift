@@ -28,6 +28,15 @@ protocol TouchSource: AnyObject {
     /// Whether the tap exists and is live. Diagnostics reads this.
     var isTapEnabled: Bool { get }
 
+    /// How many events of *any* type the source has been handed. Diagnostics only — nothing in
+    /// the gesture path reads it.
+    ///
+    /// Separate from the gesture-frame count on purpose: with an all-events tap, a total stuck at
+    /// zero and a total climbing while no gesture frame ever arrives are completely different
+    /// failures (dead tap versus gesture events not being delivered) that are indistinguishable
+    /// from a gesture-frame counter alone.
+    var eventCount: Int { get }
+
     /// - Returns: false if the tap could not be created, which in practice means Accessibility
     ///   permission has not been granted.
     func start() -> Bool
@@ -55,30 +64,66 @@ final class EventTapTouchSource: TouchSource {
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
-    /// `NSEventTypeGesture`.
-    ///
-    /// Kept as a raw number because `CGEventType` has no case for it — `CGEventType(rawValue: 29)`
-    /// returns nil — so it can neither be named nor matched in a `switch` over `CGEventType`.
-    /// Every type comparison below therefore goes through `rawValue`, uniformly, rather than
-    /// mixing enum cases and numbers.
-    ///
-    /// UNVERIFIED: this relies on a `CGEventType` parameter being able to *hold* a value with no
-    /// corresponding case. Every event tap in the wild does exactly this, and `.rawValue` is only
-    /// a load, but if the app traps the instant a finger touches the trackpad, this is the first
-    /// place to look.
-    private static let gestureEventTypeRaw: UInt32 = 29
+    /// Counts every event the callback is handed, whatever its type. An `Int` increment on the
+    /// hot path, which is the whole of the cost the all-events mask adds to types we ignore.
+    private(set) var eventCount = 0
 
-    private static let eventMask: CGEventMask = EventTapTouchSource.mask(forTypes: [
-        EventTapTouchSource.gestureEventTypeRaw,
-        CGEventType.keyDown.rawValue,
-        CGEventType.flagsChanged.rawValue,
-        CGEventType.mouseMoved.rawValue,
-        CGEventType.leftMouseDragged.rawValue,
-    ])
+    /// `NSEventTypeGesture` — event type 29.
+    ///
+    /// Taken from AppKit rather than written as a bare `29`, because AppKit *does* have a name for
+    /// it (`NSEvent.EventType.gesture`) even though `CGEventType` does not:
+    /// `CGEventType(rawValue: 29)` returns nil, so the value can neither be spelled as a
+    /// `CGEventType` case nor matched in a `switch` over one. Every type comparison below
+    /// therefore goes through `rawValue`, uniformly, rather than mixing enum cases and numbers.
+    ///
+    /// UNVERIFIED: that a session event tap is handed type-29 events at all. Holding this value in
+    /// a `CGEventType` parameter is not the risk — `CGEventType` is imported from a non-frozen C
+    /// enum, so it can carry a value with no matching case and `.rawValue` is only a load. The
+    /// risk is upstream of that, in `eventMask`: if a finger touches the trackpad and *nothing*
+    /// happens — no frames, no touch count, no steps — suspect the mask and the tap's willingness
+    /// to deliver this type, not this constant.
+    private static let gestureEventTypeRaw = UInt32(NSEvent.EventType.gesture.rawValue)
 
-    private static func mask(forTypes types: [UInt32]) -> CGEventMask {
-        types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << CGEventMask($1)) }
-    }
+    /// Every event in the session, filtered by type inside `handle(type:event:)`.
+    ///
+    /// A deliberate retreat from a narrow, per-type mask. Subscribing by bit — including bit 29
+    /// for gesture events — is reported to have stopped being honoured for gesture types around
+    /// OS X 10.8: the tap is created successfully and delivers the ordinary types, but the gesture
+    /// bit is silently ignored and no gesture event ever arrives. Since *everything* this app does
+    /// is downstream of receiving type 29, a mask that might drop it is not a trade worth making,
+    /// and the approach known to work is to tap all events and discriminate in the callback.
+    ///
+    /// Written as `~CGEventMask(0)` rather than `kCGEventMaskForAllEvents`, which is a
+    /// cast-bearing C macro and so is unlikely to import into Swift at all.
+    ///
+    /// The cost is that every event in the session — every mouse move, every keystroke — reaches
+    /// `handle(type:event:)`. That is why its `default:` branch does nothing but return the event
+    /// it was given: no allocation, no bridging to `NSEvent`, no engine contact.
+    ///
+    /// UNVERIFIED, and the loudest assumption in the app: that a `CGEvent` tap delivers gesture
+    /// events (type 29) *at all*, with an all-events mask or any other. If it does not, no
+    /// arrangement of this mask helps and the private `MultitouchSupport.framework` is the only
+    /// remaining route — see `docs/DESIGN.md`. The diagnostics window distinguishes this case from
+    /// the tap being dead outright: total events climbing while gesture frames stay at zero.
+    private static let eventMask: CGEventMask = ~CGEventMask(0)
+
+    // The narrow mask this replaced, kept because it is the thing to try if an all-events tap
+    // turns out to be too expensive — a callback on every mouse move is real work, and if the tap
+    // starts being disabled by timeout under load (watch for `onInterrupted` firing repeatedly),
+    // this is the first thing to put back. It is only worth trying together with a check that
+    // gesture events still arrive; the whole reason it was abandoned is that they may not.
+    //
+    // private static let eventMask: CGEventMask = EventTapTouchSource.mask(forTypes: [
+    //     EventTapTouchSource.gestureEventTypeRaw,
+    //     CGEventType.keyDown.rawValue,
+    //     CGEventType.flagsChanged.rawValue,
+    //     CGEventType.mouseMoved.rawValue,
+    //     CGEventType.leftMouseDragged.rawValue,
+    // ])
+    //
+    // private static func mask(forTypes types: [UInt32]) -> CGEventMask {
+    //     types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << CGEventMask($1)) }
+    // }
 
     var isTapEnabled: Bool {
         guard let tap else { return false }
@@ -141,6 +186,10 @@ final class EventTapTouchSource: TouchSource {
     ///
     /// - Returns: the event to let through, or nil to swallow it.
     fileprivate func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        // Every event in the session reaches here, because `eventMask` subscribes to all of them.
+        // Counted before anything else so the total is honest even for types handled below.
+        eventCount += 1
+
         switch type.rawValue {
         case CGEventType.tapDisabledByTimeout.rawValue,
              CGEventType.tapDisabledByUserInput.rawValue:
@@ -183,6 +232,15 @@ final class EventTapTouchSource: TouchSource {
             return shouldFreeze ? nil : Unmanaged.passUnretained(event)
 
         default:
+            // Everything else in the session, which since the mask widened to all events means
+            // most of what the machine does: scroll wheels, mouse buttons, tablet proximity,
+            // `.systemDefined` — including the media keys this app itself posts, which is the
+            // only reason posting them cannot feed back into the engine (see `MediaKeySender`).
+            //
+            // Deliberately allocation-free: one `Unmanaged.passUnretained`, which is a pointer
+            // bitcast and nothing else. No `NSEvent(cgEvent:)` bridging, no array, no engine
+            // contact. This branch is now on the path of every event in the session, and a tap
+            // callback that is slow gets the tap disabled by timeout.
             return Unmanaged.passUnretained(event)
         }
     }
@@ -199,9 +257,31 @@ final class EventTapTouchSource: TouchSource {
         guard let nsEvent = NSEvent(cgEvent: event) else { return }
 
         let touches = nsEvent.allTouches()
+            // Two normalisations of what the OS means by "a touch", neither of them a decision:
+            //
             // `.indirect` is a trackpad; `.direct` is a touchscreen. Filtering rather than
             // asserting because a Sidecar iPad can put `.direct` touches into the same stream.
-            .filter { $0.type == .indirect }
+            //
+            // `.touching` — began, moved, stationary — is the set of phases in which a finger is
+            // actually on the glass. AppKit keeps reporting a touch for the frame in which it
+            // *ends*, with `.ended` or `.cancelled`, so without this filter the frame at lift
+            // still contains one touch and `LedgeCore` never sees the empty frame that is its
+            // normal signal that the finger left. Consequence, before the filter existed: a
+            // gesture stayed engaged after lift until the stale-gesture timeout happened to fire,
+            // and while engaged the tap kept deleting `mouseMoved` — so lifting a finger and
+            // reaching for an external mouse left the pointer frozen.
+            //
+            // This belongs here and not in `LedgeCore`: it is a statement about AppKit's
+            // vocabulary — a finger that has left is not a touch — not a judgement about what the
+            // user meant. `LedgeCore` is entitled to assume a frame lists fingers currently down.
+            //
+            // UNVERIFIED: that a lifted finger is therefore absent from the frame this produces.
+            // The claim rests on `NSTouch.phase` being `.ended`/`.cancelled` for exactly that
+            // touch and on `NSTouch.Phase.touching` containing precisely began/moved/stationary.
+            // How to tell: rest one finger on the trackpad, then lift it, and watch *Touch count*
+            // in the diagnostics window. It must return to 0 promptly on lift. If it sticks at 1,
+            // this filter is not doing what it claims and cursor freeze will strand the pointer.
+            .filter { $0.type == .indirect && NSTouch.Phase.touching.contains($0.phase) }
             .map { touch in
                 TouchPoint(
                     // UNVERIFIED: `identity` is documented to be the same object for the life of

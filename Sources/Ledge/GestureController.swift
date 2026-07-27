@@ -136,6 +136,9 @@ final class GestureController {
     // MARK: - Diagnostics
 
     var isTapEnabled: Bool { touchSource.isTapEnabled }
+    /// Events of every type the tap has delivered. Read next to `frameCount`, the two of them
+    /// separate "the tap is dead" from "the tap works but gesture events never arrive".
+    var eventCount: Int { touchSource.eventCount }
     var isBrightnessAvailable: Bool { brightness.isAvailable }
     var isUsingCoreAudioVolume: Bool { preferences.useCoreAudioVolume }
 
