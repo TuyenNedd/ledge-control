@@ -17,10 +17,58 @@ public struct GestureEngine: Sendable {
     /// on that snapshot. See the note on `process(frame:)` for why.
     public var settings: GestureSettings
 
+    /// Whether the engine is listening at all.
+    ///
+    /// Read-only because switching it off can end a gesture, and that has to be reported;
+    /// `setEnabled(_:)` is the only way to change it so the events cannot be dropped.
+    public private(set) var isEnabled: Bool = true
+
     private var phase: Phase = .idle
+    /// When the last keystroke was seen, on the `TouchFrame.timestamp` clock.
+    private var lastTypingTime: Double?
+    /// When the last frame arrived, for spotting a gap the gesture should not survive.
+    private var lastFrameTime: Double?
+
+    /// The top of the "bottom quarter", in trackpad heights.
+    ///
+    /// A constant rather than a setting: `bottomQuarterOnly` is a switch the user can understand
+    /// ("only near me"), and turning it into an adjustable number would add a knob whose right
+    /// value nobody could guess. If it ever needs tuning it becomes a setting then.
+    private static let bottomQuarterTop = 0.25
 
     public init(settings: GestureSettings = GestureSettings()) {
         self.settings = settings
+    }
+
+    /// Report a keystroke, suppressing gestures for `typingLockout` seconds.
+    ///
+    /// `timestamp` must come from the same clock as `TouchFrame.timestamp`.
+    ///
+    /// Ends any gesture in flight as well as blocking new ones: a finger resting at the edge
+    /// while the user types is the commonest false positive there is, and if typing only blocked
+    /// *new* gestures then a gesture already running would keep responding to the palm.
+    public mutating func noteTyping(at timestamp: Double) -> [GestureEvent] {
+        lastTypingTime = timestamp
+        return end()
+    }
+
+    /// Switch the engine on or off, ending anything in flight when switching off.
+    ///
+    /// Switching off twice reports the ending once, because there is nothing left in flight to
+    /// report the second time — a menu that re-asserts its state cannot manufacture a second
+    /// `.disengaged`.
+    public mutating func setEnabled(_ enabled: Bool) -> [GestureEvent] {
+        isEnabled = enabled
+        return enabled ? [] : end()
+    }
+
+    /// Abandon any gesture in flight, for reasons the engine cannot see.
+    ///
+    /// The adapter calls this when the world changes underneath it — the event tap is disabled,
+    /// the screen locks, the app loses trust. Distinct from `setEnabled(false)` because it does
+    /// not change whether the engine is listening; the next gesture is allowed.
+    public mutating func cancel() -> [GestureEvent] {
+        end()
     }
 
     /// Feed one frame of touch data and act on whatever it implies.
@@ -32,30 +80,66 @@ public struct GestureEngine: Sendable {
     /// theoretical only: changing a setting means using the menu, which means using the
     /// trackpad, which means the gesture has already ended.
     public mutating func process(frame: TouchFrame) -> [GestureEvent] {
+        guard isEnabled else { return end() }
+
+        // A gap in the frames means the finger stopped moving, and travel measured across it
+        // would be credited to an intention the user has had time to abandon.
+        var events: [GestureEvent] = []
+        if let lastFrameTime, frame.timestamp - lastFrameTime > activeSettings.gestureTimeout {
+            events += abandonStaleGesture()
+        }
+        lastFrameTime = frame.timestamp
+
         // An empty frame is the finger leaving the trackpad, which is how gestures normally
-        // end.
-        if frame.touches.isEmpty { return end() }
-        // Exactly one finger, or there is nothing to interpret. Two-finger scrolling crosses
-        // the edge constantly.
-        guard frame.touches.count == 1 else { return [] }
+        // end. Any other count is not a single-finger gesture: two-finger scrolling crosses the
+        // edge constantly, so a second finger arriving ends the gesture rather than being
+        // ignored, and no gesture arms while more than one finger is down.
+        guard frame.touches.count == 1 else { return events + end() }
         let touch = frame.touches[0]
 
         switch phase {
         case .rejected(let touchID) where touchID == touch.id:
             // Already disqualified. Not re-examined, because a finger that entered the band
             // mid-stroke would otherwise satisfy every arming test on some later frame.
-            return []
-        case .armed(let arming) where arming.touchID == touch.id:
-            return activate(arming, at: touch)
-        case .engaged(let engagement) where engagement.touchID == touch.id:
-            var engagement = engagement
-            let events = engagement.advance(to: touch.position.y)
-            phase = .engaged(engagement)
             return events
+        case .armed(let arming) where arming.touchID == touch.id:
+            return events + activate(arming, at: touch)
+        case .engaged(let engagement) where engagement.touchID == touch.id:
+            return events + continueGesture(engagement, to: touch.position)
         case .engaged:
-            return []
+            // A different finger, and the one that owned the gesture is not in this frame: it
+            // has gone, whether or not an empty frame ever said so. Ending here rather than
+            // waiting keeps the engine from sitting open and unresponsive on a finger that no
+            // longer exists.
+            return events + end()
         case .idle, .armed, .rejected:
-            return arm(touch)
+            return events + arm(touch, at: frame.timestamp)
+        }
+    }
+
+    /// The rules currently in force: a gesture in flight is judged by its own snapshot, and
+    /// anything else by whatever is set now.
+    private var activeSettings: GestureSettings {
+        switch phase {
+        case .armed(let arming): return arming.settings
+        case .engaged(let engagement): return engagement.settings
+        case .idle, .rejected: return settings
+        }
+    }
+
+    /// Drop a gesture whose frames stopped arriving, so the next frame starts one afresh.
+    private mutating func abandonStaleGesture() -> [GestureEvent] {
+        switch phase {
+        case .engaged:
+            return end()
+        case .armed:
+            phase = .idle
+            return []
+        case .idle, .rejected:
+            // A disqualified finger stays disqualified. Holding still is not evidence that a
+            // finger which entered the band mid-scroll has become deliberate, and clearing the
+            // rejection here would hand it a second chance every time it paused.
+            return []
         }
     }
 
@@ -72,13 +156,43 @@ public struct GestureEngine: Sendable {
     }
 
     /// Decide whether a newly seen finger could become a gesture at all.
-    private mutating func arm(_ touch: TouchPoint) -> [GestureEvent] {
-        guard let edge = settings.edge(forX: touch.position.x) else {
+    private mutating func arm(_ touch: TouchPoint, at timestamp: Double) -> [GestureEvent] {
+        // Left undecided rather than rejected, so a finger already resting at the edge when the
+        // user stops typing can still become a gesture once the window passes, without lifting.
+        if let lastTypingTime, timestamp - lastTypingTime < settings.typingLockout { return [] }
+
+        guard let edge = settings.edge(forX: touch.position.x),
+              !settings.bottomQuarterOnly || touch.position.y <= Self.bottomQuarterTop
+        else {
             phase = .rejected(touchID: touch.id)
             return []
         }
         phase = .armed(Arming(touchID: touch.id, start: touch.position, edge: edge, settings: settings))
         return []
+    }
+
+    /// Step an engaged gesture along, unless the finger has wandered off the edge.
+    ///
+    /// Named apart from `Engagement.advance(to:)` because it decides *whether* the gesture
+    /// survives this frame, where that one only counts steps.
+    private mutating func continueGesture(_ engagement: Engagement, to position: NormalizedPoint) -> [GestureEvent] {
+        let settings = engagement.settings
+        // Measured from the band's inner boundary rather than from the trackpad edge, so the
+        // tolerance means the same thing whatever `edgeBandWidth` is set to. Generous on purpose:
+        // a long vertical slide pivots from the wrist and wanders inward, and cutting the gesture
+        // off mid-stroke feels like a bug, while a finger this far in has genuinely moved on.
+        let innerLimit = settings.edgeBandWidth + settings.maxDriftOutsideBand
+        let hasDriftedOut: Bool
+        switch engagement.edge {
+        case .left: hasDriftedOut = position.x > innerLimit
+        case .right: hasDriftedOut = position.x < 1 - innerLimit
+        }
+        guard !hasDriftedOut else { return end() }
+
+        var engagement = engagement
+        let events = engagement.advance(to: position.y)
+        phase = .engaged(engagement)
+        return events
     }
 
     /// Decide whether an armed finger has now moved like a gesture.
@@ -107,6 +221,7 @@ public struct GestureEngine: Sendable {
         var engagement = Engagement(
             touchID: touch.id,
             control: control,
+            edge: arming.edge,
             settings: settings,
             baseY: arming.start.y
         )
@@ -139,6 +254,9 @@ public struct GestureEngine: Sendable {
     private struct Engagement: Sendable {
         let touchID: Int
         let control: Control
+        /// Which edge this gesture belongs to, kept so the drift check knows which side to
+        /// measure from once the finger is no longer necessarily in the band.
+        let edge: TrackpadEdge
         /// The rules this gesture was recognised under, kept so a menu change mid-slide cannot
         /// change the size of a step or which control the closing `.disengaged` names.
         let settings: GestureSettings
