@@ -18,10 +18,16 @@ public struct GestureSettings: Sendable, Equatable {
 
     /// Vertical travel required per step, as a **fraction of trackpad height**.
     ///
-    /// Default `0.016` ≈ 1/64 of the height, matching the 64 sub-steps that fine volume mode
-    /// provides, so one full-height slide spans the entire range exactly once. Shrinking it
-    /// makes the control twitchy and overshoot; growing it means the range no longer fits in
-    /// a single comfortable slide.
+    /// Default `0.016` approximates 1/64 of the height, matching the 64 sub-steps that fine
+    /// volume mode provides, so one full-height slide spans roughly the entire range once. It
+    /// is an approximation, not a division: `1/0.016` is 62.5 steps, and 15.625 with fine
+    /// control off, so a full-height slide falls a little short of the range rather than
+    /// covering it exactly. A round 0.016 was chosen over an exact `1.0/64` because the number
+    /// is meant to be hand-tuned after real use, and a slide that lands slightly short is
+    /// unnoticeable next to being unable to reach the end at all.
+    ///
+    /// Shrinking it makes the control twitchy and overshoot; growing it means the range no
+    /// longer fits in a single comfortable slide.
     public var stepDistance: Double = 0.016
 
     /// Vertical travel required before a gesture engages at all, as a **fraction of trackpad
@@ -30,6 +36,18 @@ public struct GestureSettings: Sendable, Equatable {
     /// A dead zone: default `0.02` has to be larger than the wobble of a finger resting at
     /// the edge, or the app fires when the user is holding still, but small enough that the
     /// gesture still feels immediate rather than needing a wind-up.
+    ///
+    /// Note that `0.02` deliberately **exceeds** `effectiveStepDistance` (0.016 with fine
+    /// control on). The step anchor is set to where the touch *started*, not to where it
+    /// engaged, so the travel spent clearing this dead zone still counts toward steps: at the
+    /// instant a gesture is recognised at least one step is already due and fires in the same
+    /// frame. That is the intent — recognition should produce feedback immediately, rather than
+    /// leaving the gesture dead for another step's worth of travel after the user has already
+    /// committed to it. Total steps over a slide are `floor(travelFromStart / step)` either
+    /// way, so this trades nothing away.
+    ///
+    /// Anyone lowering this below `effectiveStepDistance` should know they are giving that up:
+    /// the gesture will then engage silently and wait for more travel before the first step.
     public var activationDistance: Double = 0.02
 
     /// How far an already-engaged finger may stray beyond the band before the gesture is

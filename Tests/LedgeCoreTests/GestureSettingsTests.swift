@@ -105,3 +105,64 @@ func coarseStepDistance() {
     s.fineControl = false
     #expect(s.effectiveStepDistance == fine * 4)
 }
+
+
+@Test("out-of-range x classifies as the edge it is beyond")
+func outOfRangeXClassifiesAsTheNearerEdge() {
+    let s = GestureSettings()
+    // `NormalizedPoint` deliberately does not clamp, so an adapter bug can deliver x outside
+    // 0...1. The documented contract is that such a value still resolves to the edge it has
+    // overshot rather than to `nil`: a gesture already in progress must not evaporate because
+    // one frame reported 1.02. Pinned here because a `>= 0 && < width` style rewrite of
+    // `edge(forX:)` would silently break it while every in-range test stayed green.
+    #expect(s.edge(forX: -0.5) == .left)
+    #expect(s.edge(forX: 1.5) == .right)
+}
+
+@Test("drift tolerance stays narrower than the band it is a tolerance for")
+func driftToleranceIsNarrowerThanTheBand() {
+    let s = GestureSettings()
+    // `maxDriftOutsideBand` only has meaning as a margin *around* the band. If it were the
+    // wider of the two, the reachable area outside the band would exceed the band itself and
+    // "started at the edge" would stop being the thing that defines the gesture — a finger
+    // could spend most of a stroke in the middle of the trackpad and still be driving a
+    // control. The band must remain the dominant term.
+    #expect(s.maxDriftOutsideBand < s.edgeBandWidth)
+    #expect(s.maxDriftOutsideBand > 0)
+}
+
+@Test("a stale gesture expires sooner than the typing lockout releases")
+func gestureTimeoutExpiresBeforeTypingLockout() {
+    let s = GestureSettings()
+    // These two windows both end a gesture, and their order decides which one is ever the
+    // cause. If a gesture could outlive the typing lockout, then a gesture interrupted by a
+    // keystroke would already have timed out by the time the lockout expired, and the lockout
+    // could never be the thing that released — it would be dead configuration. Keeping the
+    // timeout the shorter of the two makes the lockout a real, observable window.
+    #expect(s.gestureTimeout < s.typingLockout)
+    #expect(s.gestureTimeout > 0)
+}
+
+@Test("the dead zone costs at least one step and at most a couple")
+func deadZoneIsMeasuredInSteps() {
+    let s = GestureSettings()
+    // The dead zone is travel the user spends with no feedback, so its only meaningful unit is
+    // steps, not trackpad fractions. At least one step must be due the moment the gesture
+    // engages, or recognition is followed by another stretch of nothing (see the
+    // `activationDistance` doc comment). Fewer than a few steps, or the gesture stops feeling
+    // immediate — a dead zone of half the trackpad would satisfy the lower bound and be
+    // unusable.
+    let stepsSpentArming = s.activationDistance / s.effectiveStepDistance
+    #expect(stepsSpentArming >= 1)
+    #expect(stepsSpentArming < 3)
+}
+
+@Test("the bottom-quarter restriction ships off")
+func bottomQuarterRestrictionShipsOff() {
+    let s = GestureSettings()
+    // Asserted as policy, not as a literal: DESIGN.md commits to shipping the strongest and
+    // most restrictive false-positive defence *disabled*, so that it is switched on in
+    // response to evidence rather than imposed before any exists. Flipping the default is a
+    // product decision, and this test is the thing that makes it a deliberate one.
+    #expect(s.bottomQuarterOnly == false)
+}
