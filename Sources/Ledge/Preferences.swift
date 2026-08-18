@@ -28,7 +28,6 @@ final class Preferences {
         static let fineControl = "fineControl"
         static let swapSides = "swapSides"
 
-        static let hapticsEnabled = "hapticsEnabled"
         static let cursorFreezeEnabled = "cursorFreezeEnabled"
         static let isEnabled = "isEnabled"
         static let useCoreAudioVolume = "useCoreAudioVolume"
@@ -56,10 +55,9 @@ final class Preferences {
             Key.swapSides: seed.swapSides,
 
             // No `GestureSettings` counterpart: these govern the adapter layer, not the gesture
-            // logic. Haptics and cursor freeze are on because they are the behaviour the app is
-            // for; `isEnabled` is on because an app that starts switched off looks broken; the
-            // CoreAudio backend is off because it produces no HUD (see `VolumeController`).
-            Key.hapticsEnabled: true,
+            // logic. Cursor freeze is on because it is the behaviour the app is for; `isEnabled`
+            // is on because an app that starts switched off looks broken; the CoreAudio backend is
+            // off because it produces no HUD (see `VolumeController`).
             Key.cursorFreezeEnabled: true,
             Key.isEnabled: true,
             Key.useCoreAudioVolume: false,
@@ -96,11 +94,6 @@ final class Preferences {
             defaults.set(newValue.fineControl, forKey: Key.fineControl)
             defaults.set(newValue.swapSides, forKey: Key.swapSides)
         }
-    }
-
-    var hapticsEnabled: Bool {
-        get { defaults.bool(forKey: Key.hapticsEnabled) }
-        set { defaults.set(newValue, forKey: Key.hapticsEnabled) }
     }
 
     /// Whether pointer movement is swallowed while a gesture owns a control, so a slide along the
