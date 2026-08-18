@@ -46,6 +46,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.delegate = self
         buildMenu()
         statusItem.menu = menu
+
+        controller.onEngagementChanged = { [weak self] engaged in
+            if engaged {
+                self?.statusItem.button?.contentTintColor = .controlAccentColor
+            } else {
+                self?.statusItem.button?.contentTintColor = nil
+            }
+        }
     }
 
     private func buildMenu() {
