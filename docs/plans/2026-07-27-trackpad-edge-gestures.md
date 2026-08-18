@@ -722,3 +722,80 @@ fails, nothing else matters.
 - [ ] **7. Cursor freeze** holds the pointer still during a gesture and leaves no stuck input
       afterwards.
 - [ ] **8. Permission persistence** across a rebuild and relaunch.
+
+---
+
+## Post-implementation notes
+
+The following documents what changed during on-device testing versus what this plan predicted.
+The plan above is preserved intact as a record of the design process.
+
+### What worked as predicted
+
+- **Event tap delivers single-finger touches.** The core assumption (checklist item 1) holds.
+  `CGEvent` type 29 carries `allTouches()` with usable `normalizedPosition` and stable
+  `identity.hash` values.
+- **Volume through synthesised media keys works perfectly.** Fine mode (Shift+Option flags)
+  is honoured, producing ~1.6% steps. The native HUD appears.
+- **DisplayServices resolves and sets brightness** on Apple Silicon built-in display.
+- **All 54 LedgeCore tests pass** on both Linux and macOS without modification.
+- **The gesture engine guards work.** No changes to thresholds or guard logic were needed
+  beyond tightening `edgeBandWidth`.
+
+### What the plan got wrong
+
+**1. Haptic feedback does not work for LSUIElement apps.**
+
+`NSHapticFeedbackManager.defaultPerformer.perform(.alignment, ...)` silently does nothing
+when the app has `LSUIElement = true` (no dock icon, no activation). The private `MTActuator`
+API from `MultitouchSupport.framework` was tried as a workaround and does produce trackpad
+haptics, but it requires maintaining a fragile private struct layout that changes between
+macOS versions. The feature was dropped entirely by user decision -- the maintenance cost is
+not worth a single pulse per step.
+
+**2. Cursor freeze via nil-return and CGAssociate both fail.**
+
+The plan specified returning nil for mouseMoved events to freeze the cursor. This does not
+work: the window server moves the cursor before the event tap callback fires, so suppressing
+the event from downstream consumers does not undo the movement.
+
+`CGAssociateMouseAndMouseCursorPosition(false)` was tried next. On macOS 26 Tahoe it has no
+observable effect -- the cursor continues to move regardless.
+
+The working approach is `CGWarpMouseCursorPosition`: save the cursor position at engagement,
+then on every mouseMoved event during the gesture, warp the cursor back to the saved position
+and swallow the event. This produces rock-solid cursor freeze with no perceptible flicker.
+
+**3. Synthesised brightness keys DO trigger the native HUD.**
+
+The plan stated "synthesised brightness media keys don't work" based on developer forums
+reports. This is partially correct: they do not CHANGE the brightness value. However, they
+DO trigger the native HUD indicator to display the current level. The working approach is:
+`DisplayServices` sets the value, then a synthesised brightness media key triggers the HUD.
+No custom `BrightnessHUD` overlay was needed.
+
+**4. Edge band narrowed significantly.**
+
+The plan specified `edgeBandWidth = 0.10` (~16mm). On-device testing showed this was far too
+wide -- normal trackpad use constantly crossed the edge band. The final tuned value is
+`0.025` (~4mm), and `maxDriftOutsideBand` was tightened to `0.02`. The narrow band requires
+deliberate placement at the very edge, which eliminates nearly all false positives.
+
+**5. Menu items simplified.**
+
+The "Haptic Feedback" and "Continuous Volume (No HUD)" menu items were removed. The final
+menu is: Enabled, Swap Sides, Fine Control, Bottom Quarter Only, Freeze Cursor During
+Gesture, Launch at Login, Diagnostics, Quit.
+
+### Checklist resolution
+
+| Item | Result |
+|---|---|
+| 1. Event tap delivers touches | Pass |
+| 2. Volume responds with HUD | Pass |
+| 3. Fine granularity is real | Pass -- ~1.6% steps confirmed |
+| 4. Brightness responds | Pass -- native HUD via media key synthesis |
+| 5. Haptics | Fail -- removed (LSUIElement incompatibility) |
+| 6. False positives | Pass after edge band narrowing to 0.025 |
+| 7. Cursor freeze | Pass via CGWarpMouseCursorPosition |
+| 8. Permission persistence | Pass with stable bundle identifier |
