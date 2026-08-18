@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: GestureController?
     private var menuBar: MenuBarController?
     private var diagnostics: DiagnosticsWindow?
+    private var settingsWindow: SettingsWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let controller = GestureController(preferences: preferences, touchSource: touchSource)
@@ -23,8 +24,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let diagnostics = DiagnosticsWindow(controller: controller)
         self.diagnostics = diagnostics
 
+        let settingsWindow = SettingsWindow(preferences: preferences) { [weak controller] in
+            controller?.applyPreferences()
+        }
+        self.settingsWindow = settingsWindow
+
         let menuBar = MenuBarController(preferences: preferences, controller: controller)
         menuBar.onShowDiagnostics = { diagnostics.show() }
+        menuBar.onShowSettings = { settingsWindow.show() }
         self.menuBar = menuBar
 
         // Prompts if needed. Granting does not take effect until relaunch, so the alert below is
