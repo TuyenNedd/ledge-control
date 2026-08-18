@@ -35,6 +35,10 @@ final class GestureController {
     /// `.engaged`/`.disengaged` events, which the engine guarantees come in pairs.
     private(set) var engagedControl: Control?
 
+    /// Called on the main thread whenever the engagement state transitions.
+    /// `true` means a gesture just engaged; `false` means it just disengaged.
+    var onEngagementChanged: ((Bool) -> Void)?
+
     /// The most recent frame, and how many have arrived. Diagnostics only — nothing in the
     /// gesture path reads these, and the frame counter is what distinguishes "no touches" from
     /// "no events arriving at all", which are the two failure modes that look identical.
@@ -101,6 +105,7 @@ final class GestureController {
             switch event {
             case .engaged(let control):
                 engagedControl = control
+                onEngagementChanged?(true)
                 if preferences.cursorFreezeEnabled {
                     // Save the current cursor position in CG coordinates (top-left origin).
                     // CGEvent(source: nil)?.location gives us CG coordinates directly.
@@ -110,6 +115,7 @@ final class GestureController {
             case .disengaged:
                 touchSource.savedCursorPosition = nil
                 engagedControl = nil
+                onEngagementChanged?(false)
             case .step(let control, let direction):
                 perform(control, direction)
                 stepCount += 1

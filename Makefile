@@ -30,6 +30,7 @@
 
 CONFIG ?= release
 APP_NAME := Ledge
+SIGNING_IDENTITY ?= Ledge Dev
 BUNDLE := dist/$(APP_NAME).app
 CONTENTS := $(BUNDLE)/Contents
 
@@ -40,7 +41,7 @@ BIN_DIR = $(shell swift build -c $(CONFIG) --show-bin-path)
 
 BUNDLE_ID := xyz.tuyennedd.ledge
 
-.PHONY: all build app install run test reset-permission clean
+.PHONY: all build app install reinstall run test reset-permission clean
 
 all: app
 
@@ -56,8 +57,9 @@ app: build
 	cp Resources/Info.plist "$(CONTENTS)/Info.plist"
 	printf 'APPL????' > "$(CONTENTS)/PkgInfo"
 	cp "$(BIN_DIR)/$(APP_NAME)" "$(CONTENTS)/MacOS/$(APP_NAME)"
-	codesign --force --sign - "$(BUNDLE)"
+	codesign --force --sign "$(SIGNING_IDENTITY)" "$(BUNDLE)"
 	@echo "Built $(BUNDLE) — verify with: codesign -dv $(BUNDLE)"
+	@echo "# Ad-hoc: make app SIGNING_IDENTITY=\"-\""
 
 ## Replace the copy in /Applications. Launch-at-login via SMAppService expects the app to live
 ## somewhere the system can find it, so install before testing that menu item.
@@ -66,6 +68,14 @@ install: app
 	cp -R "$(BUNDLE)" /Applications/
 	@echo "Installed /Applications/$(APP_NAME).app"
 
+## Quit, rebuild, install, and relaunch in one step. Useful during development when the app is
+## already running.
+reinstall:
+	osascript -e 'quit app "Ledge"' || true
+	sleep 1
+	$(MAKE) install
+	open /Applications/$(APP_NAME).app
+
 ## Launch the bundle, not the bare binary, so it runs under the identity that holds the
 ## Accessibility grant.
 run: app
@@ -73,10 +83,13 @@ run: app
 
 ## Forget the Accessibility decision for this bundle id, so the next launch asks again.
 ##
-## Needed after a rebuild, because the ad-hoc signature's designated requirement changes with the
-## binary and TCC keeps matching the old one — see the note at the top of this file. Run this
-## whenever the app claims it has no permission while the settings pane shows it enabled. Quit the
-## app first; then relaunch and grant when prompted.
+## Only needed with ad-hoc signing (SIGNING_IDENTITY="-"), because the ad-hoc signature's
+## designated requirement changes with the binary and TCC keeps matching the old one — see the
+## note at the top of this file. When using a stable certificate (the default "Ledge Dev") the
+## grant persists across rebuilds and this target is unnecessary.
+##
+## Run this whenever the app claims it has no permission while the settings pane shows it enabled.
+## Quit the app first; then relaunch and grant when prompted.
 reset-permission:
 	tccutil reset Accessibility $(BUNDLE_ID)
 	@echo "Reset Accessibility for $(BUNDLE_ID) — relaunch the app and grant again."

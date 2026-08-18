@@ -15,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: GestureController?
     private var menuBar: MenuBarController?
     private var diagnostics: DiagnosticsWindow?
+    private var settingsWindow: SettingsWindow?
+    private var onboardingWindow: OnboardingWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let controller = GestureController(preferences: preferences, touchSource: touchSource)
@@ -23,15 +25,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let diagnostics = DiagnosticsWindow(controller: controller)
         self.diagnostics = diagnostics
 
+        let settingsWindow = SettingsWindow(preferences: preferences) { [weak controller] in
+            controller?.applyPreferences()
+        }
+        self.settingsWindow = settingsWindow
+
         let menuBar = MenuBarController(preferences: preferences, controller: controller)
         menuBar.onShowDiagnostics = { diagnostics.show() }
+        menuBar.onShowSettings = { settingsWindow.show() }
         self.menuBar = menuBar
 
         // Prompts if needed. Granting does not take effect until relaunch, so the alert below is
         // still the right response to a failed start even when the user says yes immediately.
         Permissions.requestIfNeeded()
 
-        if !controller.start() {
+        // Start the event tap before showing onboarding, so that the "Try It" page can actually
+        // detect gestures. If start() fails (permission denied), the onboarding page 3 step
+        // counter will remain at zero but the permission page guides the user correctly.
+        let startSucceeded = controller.start()
+
+        // Show the onboarding flow on first launch. The onboarding window polls AXIsProcessTrusted
+        // itself and provides step-count feedback by reading from the controller.
+        if !preferences.hasCompletedOnboarding {
+            let onboarding = OnboardingWindow(
+                preferences: preferences,
+                stepCountProvider: { [weak controller] in controller?.stepCount ?? 0 }
+            )
+            self.onboardingWindow = onboarding
+            onboarding.show()
+        }
+
+        if !startSucceeded {
             presentPermissionAlert(diagnostics: diagnostics)
         }
     }

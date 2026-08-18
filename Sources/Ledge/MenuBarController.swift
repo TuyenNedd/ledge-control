@@ -15,6 +15,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// Set by `AppDelegate`, which owns the window.
     var onShowDiagnostics: (() -> Void)?
 
+    /// Set by `AppDelegate`, which owns the settings window.
+    var onShowSettings: (() -> Void)?
+
     /// Each toggle paired with how to read its current value, so `menuNeedsUpdate(_:)` can refresh
     /// checkmarks in one loop instead of needing a stored property per item.
     ///
@@ -43,6 +46,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.delegate = self
         buildMenu()
         statusItem.menu = menu
+
+        controller.onEngagementChanged = { [weak self] engaged in
+            if engaged {
+                self?.statusItem.button?.contentTintColor = .controlAccentColor
+            } else {
+                self?.statusItem.button?.contentTintColor = nil
+            }
+        }
     }
 
     private func buildMenu() {
@@ -77,6 +88,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
+
+        let settings = NSMenuItem(title: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
 
         let diagnostics = NSMenuItem(title: "Diagnostics…", action: #selector(showDiagnostics), keyEquivalent: "")
         diagnostics.target = self
@@ -165,6 +180,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     private static var isLaunchAtLoginEnabled: Bool {
         SMAppService.mainApp.status == .enabled
+    }
+
+    @objc private func showSettings() {
+        onShowSettings?()
     }
 
     @objc private func showDiagnostics() {
