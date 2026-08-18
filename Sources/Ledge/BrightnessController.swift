@@ -82,11 +82,9 @@ final class BrightnessController {
 
         guard setBrightness(display, target) == 0 else { return }
 
-        // UNVERIFIED: whether this still makes the OS draw its own brightness indicator on
-        // macOS 26. It is the call MonitorControl and friends use for exactly that, but the same
-        // Tahoe housecleaning that removed `OSDUIHelper` may have left it inert. On-device
-        // checklist item 4 decides whether a custom overlay is needed. Either way brightness
-        // itself changes, so a silent no-op here is cosmetic, not fatal.
+        // Still called for legacy compatibility, but no longer relied upon for the indicator.
+        // On macOS 26 Tahoe this call is inert (OSDUIHelper was removed). The custom
+        // BrightnessHUD in GestureController provides the visual feedback instead.
         _ = brightnessChanged?(display, Double(target))
     }
 

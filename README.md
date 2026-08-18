@@ -106,12 +106,13 @@ Work down this list in order. If step 1 fails, nothing below it matters.
       - Steps of ~1.6% → `Shift`+`Option` is honoured on synthesised events, fine mode works.
       - Steps of ~6.25% → the flags are ignored. Fine mode is a no-op and the menu item is
         lying; remove it rather than leave it there.
-- [ ] **5. Brightness responds.** Slide the left edge. Note whether any system indicator appears —
-      that decides whether a custom HUD is needed. If *DisplayServices* reads `NOT RESOLVED`, the
+- [ ] **5. Brightness responds.** Slide the left edge. A custom HUD overlay should appear showing
+      the current brightness level. If *DisplayServices* reads `NOT RESOLVED`, the
       private symbols are gone and brightness cannot work at all.
-- [ ] **6. Haptics** fire once per step and don't feel noisy.
-- [ ] **7. Cursor freeze** holds the pointer still during a gesture, and leaves no stuck input
-      afterwards.
+- [ ] **6. Haptics** fire once per step (CoreHaptics engine, works regardless of app activation
+      state).
+- [ ] **7. Cursor freeze** holds the pointer still during a gesture via
+      `CGAssociateMouseAndMouseCursorPosition`, and releases cleanly on disengage.
 - [ ] **8. False positives.** Use the machine normally for a day — scroll, type, drag. Count
       unintended changes. This is the real test; see Tuning.
 - [ ] **9. Permission after a rebuild.** Rebuild, relaunch, and confirm the app still works.
@@ -180,8 +181,6 @@ Full reasoning, including the rejected alternatives, is in [`docs/DESIGN.md`](do
   Fixing it properly means remembering rejected touch ids as a set.
 - **A full-height slide covers ~62.5 steps, not 64,** so 0% to 100% isn't quite reachable in one
   stroke. `stepDistance` is `0.016`, an approximation of `1/64`.
-- **No custom HUD.** The app relies on the system indicator. If step 5 above shows no indicator
-  for brightness, one is needed.
 - **External displays are out of scope.** Built-in only; no DDC.
 - **The Accessibility grant does not survive a rebuild** while the app is ad-hoc signed, and the
   app looks enabled while it isn't. `make reset-permission` after each build, or sign with a stable
