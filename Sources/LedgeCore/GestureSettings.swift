@@ -11,10 +11,11 @@ public struct GestureSettings: Sendable, Equatable {
     /// How far in from a vertical edge a touch may start and still count, as a **fraction of
     /// trackpad width**.
     ///
-    /// Default `0.10` ≈ 16 mm on a MacBook trackpad — wide enough to hit without aiming or
-    /// looking down. Widening it costs false positives, since the edge is territory fingers
-    /// cross constantly while scrolling; narrowing it costs missed gestures.
-    public var edgeBandWidth: Double = 0.10
+    /// Default `0.05` ≈ 8 mm on a MacBook trackpad — close enough to the physical edge that the
+    /// gesture zone feels anchored there, while still hittable without looking down. Widening it
+    /// costs false positives, since the edge is territory fingers cross constantly while scrolling;
+    /// narrowing it costs missed gestures.
+    public var edgeBandWidth: Double = 0.05
 
     /// Vertical travel required per step, as a **fraction of trackpad height**.
     ///
@@ -53,10 +54,10 @@ public struct GestureSettings: Sendable, Equatable {
     /// How far an already-engaged finger may stray beyond the band before the gesture is
     /// abandoned, as a **fraction of trackpad width**.
     ///
-    /// Default `0.06` buys tolerance: a long vertical slide drifts sideways, and cutting it
-    /// off mid-stroke feels broken. Too much tolerance and a finger that has genuinely moved
-    /// on to pointing keeps driving the control.
-    public var maxDriftOutsideBand: Double = 0.06
+    /// Default `0.04` keeps drift tolerance narrower than the edge band, so "started at the
+    /// edge" remains the defining characteristic of the gesture. Too much tolerance and a finger
+    /// that has genuinely moved on to pointing keeps driving the control.
+    public var maxDriftOutsideBand: Double = 0.04
 
     /// Whether a gesture may only start in the bottom quarter of the trackpad.
     ///
