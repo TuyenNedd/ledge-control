@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController?
     private var diagnostics: DiagnosticsWindow?
     private var settingsWindow: SettingsWindow?
+    private var onboardingWindow: OnboardingWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let controller = GestureController(preferences: preferences, touchSource: touchSource)
@@ -37,6 +38,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Prompts if needed. Granting does not take effect until relaunch, so the alert below is
         // still the right response to a failed start even when the user says yes immediately.
         Permissions.requestIfNeeded()
+
+        // Show the onboarding flow on first launch. The onboarding window polls AXIsProcessTrusted
+        // itself and provides step-count feedback by reading from the controller.
+        if !preferences.hasCompletedOnboarding {
+            let onboarding = OnboardingWindow(
+                preferences: preferences,
+                stepCountProvider: { [weak controller] in controller?.stepCount ?? 0 }
+            )
+            self.onboardingWindow = onboarding
+            onboarding.show()
+        }
 
         if !controller.start() {
             presentPermissionAlert(diagnostics: diagnostics)
