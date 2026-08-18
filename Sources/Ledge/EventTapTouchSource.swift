@@ -25,6 +25,11 @@ protocol TouchSource: AnyObject {
     /// Whether swallowing pointer movement during a gesture is wanted at all.
     var cursorFreezeEnabled: Bool { get set }
 
+    /// The cursor position (in CG screen coordinates, top-left origin) to warp back to on each
+    /// mouseMoved/leftMouseDragged event while a gesture is engaged. Set by `GestureController`
+    /// on engagement; cleared on disengagement.
+    var savedCursorPosition: CGPoint? { get set }
+
     /// Whether the tap exists and is live. Diagnostics reads this.
     var isTapEnabled: Bool { get }
 
@@ -60,6 +65,7 @@ final class EventTapTouchSource: TouchSource {
 
     var isGestureEngaged = false
     var cursorFreezeEnabled = true
+    var savedCursorPosition: CGPoint?
 
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -217,12 +223,14 @@ final class EventTapTouchSource: TouchSource {
             return Unmanaged.passUnretained(event)
 
         case CGEventType.mouseMoved.rawValue, CGEventType.leftMouseDragged.rawValue:
-            // Pass through unconditionally. Cursor freeze is now handled at the WindowServer
-            // level via CGAssociateMouseAndMouseCursorPosition (driven by GestureController on
-            // engage/disengage), which stops the pointer from moving before events even reach the
-            // tap. Swallowing events here never worked: WindowServer applies pointer movement
-            // before the event reaches any tap, so returning nil only hid the event from apps
-            // without undoing the cursor motion.
+            // On macOS 26 Tahoe, CGAssociateMouseAndMouseCursorPosition does not freeze the
+            // cursor. Instead, on each mouse-move event we warp the cursor back to the saved
+            // position and swallow the event so apps never see the movement. The combination
+            // of warping + swallowing holds the cursor visually still during a gesture.
+            if isGestureEngaged && cursorFreezeEnabled, let pos = savedCursorPosition {
+                CGWarpMouseCursorPosition(pos)
+                return nil
+            }
             return Unmanaged.passUnretained(event)
 
         default:
