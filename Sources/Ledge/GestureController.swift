@@ -27,7 +27,6 @@ final class GestureController {
 
     private let preferences: Preferences
     private let touchSource: TouchSource
-    private let haptics: Haptics
     private let brightness: BrightnessController
     private let mediaKeyVolume: VolumeAdjusting
     private let coreAudioVolume: VolumeAdjusting
@@ -46,7 +45,6 @@ final class GestureController {
     init(preferences: Preferences, touchSource: TouchSource) {
         self.preferences = preferences
         self.touchSource = touchSource
-        self.haptics = Haptics(preferences: preferences)
         self.brightness = BrightnessController()
         self.mediaKeyVolume = VolumeController()
         self.coreAudioVolume = CoreAudioVolumeController()
@@ -115,7 +113,6 @@ final class GestureController {
             case .step(let control, let direction):
                 perform(control, direction)
                 stepCount += 1
-                haptics.pulse()
             }
         }
         // Pushed rather than pulled so the tap callback does not have to reach back into the
@@ -160,7 +157,6 @@ final class GestureController {
     var isBrightnessAvailable: Bool { brightness.isAvailable }
     var isUsingCoreAudioVolume: Bool { preferences.useCoreAudioVolume }
     var isCursorLocked: Bool { engagedControl != nil && preferences.cursorFreezeEnabled }
-    var hapticPulseCount: Int { haptics.pulseCount }
 
     func currentVolumeScalar() -> Float? { volumeBackend.currentScalar() }
     func currentBrightness() -> Float? { brightness.currentBrightness() }

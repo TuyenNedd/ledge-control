@@ -61,7 +61,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        addToggle("Haptic Feedback", action: #selector(toggleHaptics)) { preferences.hapticsEnabled }
         addToggle("Freeze Cursor During Gesture", action: #selector(toggleCursorFreeze)) {
             preferences.cursorFreezeEnabled
         }
@@ -132,10 +131,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         settings.bottomQuarterOnly.toggle()
         preferences.gestureSettings = settings
         controller.applyPreferences()
-    }
-
-    @objc private func toggleHaptics() {
-        preferences.hapticsEnabled.toggle()
     }
 
     @objc private func toggleCursorFreeze() {
