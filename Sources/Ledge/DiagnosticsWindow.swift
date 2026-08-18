@@ -117,7 +117,6 @@ final class DiagnosticsWindow: NSObject, NSWindowDelegate {
         lines.append("")
         lines.append("Haptic pulses fired     \(controller.hapticPulseCount)")
         lines.append("Cursor locked           \(yesNo(controller.isCursorLocked))")
-        lines.append("Brightness HUD shown    \(controller.brightnessHUDShowCount)")
         lines.append("")
         lines.append("Volume backend          \(controller.isUsingCoreAudioVolume ? "CoreAudio (no HUD)" : "synthesised media keys")")
         lines.append("Volume scalar           \(describe(unit: controller.currentVolumeScalar()))")
