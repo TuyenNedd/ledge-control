@@ -15,13 +15,13 @@ func edgeClassification() {
 @Test("the band is exactly edgeBandWidth wide, open at its inner boundary")
 func edgeBandBoundary() {
     let s = GestureSettings()
-    // Pins the default width behaviourally: 0.04 is inside a 0.05 band, 0.06 is not. A
+    // Pins the default width behaviourally: 0.02 is inside a 0.025 band, 0.03 is not. A
     // hardcoded or mistyped width fails one of these.
-    #expect(s.edge(forX: 0.04) == .left)
-    #expect(s.edge(forX: 0.06) == nil)
-    // Mirrored on the right: 0.96 is inside the outer 0.05, 0.94 is not.
-    #expect(s.edge(forX: 0.96) == .right)
-    #expect(s.edge(forX: 0.94) == nil)
+    #expect(s.edge(forX: 0.02) == .left)
+    #expect(s.edge(forX: 0.03) == nil)
+    // Mirrored on the right: 0.98 is inside the outer 0.025, 0.97 is not.
+    #expect(s.edge(forX: 0.98) == .right)
+    #expect(s.edge(forX: 0.97) == nil)
     // The inner boundary itself is outside the band, on both sides.
     #expect(s.edge(forX: s.edgeBandWidth) == nil)
     #expect(s.edge(forX: 1 - s.edgeBandWidth) == nil)
@@ -33,11 +33,11 @@ func edgeBandBoundary() {
 @Test("widening the band classifies x that a narrower band rejected")
 func edgeBandWidthIsRespected() {
     var s = GestureSettings()
-    #expect(s.edge(forX: 0.08) == nil)
-    #expect(s.edge(forX: 0.92) == nil)
-    s.edgeBandWidth = 0.10
-    #expect(s.edge(forX: 0.08) == .left)
-    #expect(s.edge(forX: 0.92) == .right)
+    #expect(s.edge(forX: 0.04) == nil)
+    #expect(s.edge(forX: 0.96) == nil)
+    s.edgeBandWidth = 0.05
+    #expect(s.edge(forX: 0.04) == .left)
+    #expect(s.edge(forX: 0.96) == .right)
 }
 
 @Test("a zero-width band classifies nothing, not even the outermost x")
