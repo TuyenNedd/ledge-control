@@ -36,11 +36,6 @@ final class GestureController {
     /// `.engaged`/`.disengaged` events, which the engine guarantees come in pairs.
     private(set) var engagedControl: Control?
 
-    /// The cursor position (in AppKit screen coordinates, origin bottom-left) captured at
-    /// engagement. Used to warp the cursor back when the gesture ends, so the user's pointer
-    /// appears stationary throughout the slide.
-    private var cursorPositionAtEngagement: NSPoint?
-
     /// The most recent frame, and how many have arrived. Diagnostics only — nothing in the
     /// gesture path reads these, and the frame counter is what distinguishes "no touches" from
     /// "no events arriving at all", which are the two failure modes that look identical.
@@ -109,25 +104,14 @@ final class GestureController {
             case .engaged(let control):
                 engagedControl = control
                 if preferences.cursorFreezeEnabled {
-                    // Save the cursor position BEFORE disassociating, so we can restore it
-                    // when the gesture ends. NSEvent.mouseLocation uses bottom-left origin.
-                    cursorPositionAtEngagement = NSEvent.mouseLocation
-                    CGAssociateMouseAndMouseCursorPosition(boolean_t(0))
+                    // Save the current cursor position in CG coordinates (top-left origin).
+                    // CGEvent(source: nil)?.location gives us CG coordinates directly.
+                    // Each mouseMoved event will warp back to this point.
+                    touchSource.savedCursorPosition = CGEvent(source: nil)?.location ?? .zero
                 }
             case .disengaged:
-                if preferences.cursorFreezeEnabled {
-                    CGAssociateMouseAndMouseCursorPosition(boolean_t(1))
-                    // Warp cursor back to where it was when the gesture started.
-                    // NSEvent.mouseLocation is bottom-left origin; CGWarpMouseCursorPosition
-                    // uses top-left origin, so y must be flipped.
-                    if let pos = cursorPositionAtEngagement,
-                       let screen = NSScreen.main {
-                        let flipped = CGPoint(x: pos.x, y: screen.frame.height - pos.y)
-                        CGWarpMouseCursorPosition(flipped)
-                    }
-                }
+                touchSource.savedCursorPosition = nil
                 engagedControl = nil
-                cursorPositionAtEngagement = nil
             case .step(let control, let direction):
                 perform(control, direction)
                 stepCount += 1
