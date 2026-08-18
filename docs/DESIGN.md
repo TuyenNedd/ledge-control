@@ -1,13 +1,13 @@
-# Ledge — Design Document
+# Ledge -- Design Document
 
 ## Problem
 
 macOS changes volume and brightness in coarse steps (16 for volume). Finer steps exist
-via `Shift`+`Option`+media key, but pressing three keys at once is awkward — especially
+via `Shift`+`Option`+media key, but pressing three keys at once is awkward -- especially
 when reclining and watching something.
 
 Goal: adjust volume and brightness by sliding a finger along the **edge of the trackpad**,
-with haptic feedback, fine granularity, and no configuration required.
+with fine granularity and no configuration required.
 
 ## Target environment
 
@@ -18,7 +18,7 @@ intended to be portable.
 |---|---|
 | Machine | MacBook Pro M4 (Apple Silicon) |
 | OS | macOS 26.2 (Tahoe) |
-| Displays | Built-in only — external display support is explicitly out of scope |
+| Displays | Built-in only -- external display support is explicitly out of scope |
 | Toolchain | Xcode installed, SwiftPM, no paid Apple Developer account |
 
 ## Two findings that shaped the architecture
@@ -35,34 +35,45 @@ implementation details and building on them invites breakage.
 **Consequence:** we cannot summon the HUD directly. To get a native HUD we must cause the
 change through a path the OS itself already decorates with a HUD.
 
-### 2. Synthesised brightness media keys do not work; volume ones do
+### 2. Synthesised brightness media keys do not change brightness, but they do trigger the native indicator
 
 Posting a `systemDefined` event with `NX_KEYTYPE_SOUND_UP` reliably changes volume and
-brings up the system HUD. The brightness equivalents behave differently — see
+brings up the system HUD. The brightness equivalents behave differently -- see
 [developer forums thread 60545](https://developer.apple.com/forums/thread/60545), where
-volume keys work but `NX_KEYTYPE_BRIGHTNESS_UP`/`DOWN` do not.
+volume keys work but `NX_KEYTYPE_BRIGHTNESS_UP`/`DOWN` do not change the brightness value.
 
-**Consequence:** volume and brightness need different backends. A single uniform
-"synthesise a media key" approach would half-work, which is worse than knowingly splitting.
+However, while synthesised brightness keys do not perform the actual brightness change, they
+**do** trigger the native HUD indicator to display the current brightness level. This means
+the approach for brightness is:
+
+1. `DisplayServices` sets the brightness value directly.
+2. A synthesised brightness media key event is posted immediately after.
+3. The media key triggers the native HUD, which reads and displays the already-updated value.
+
+This gives native HUD display for brightness without a custom overlay.
+
+**Consequence:** volume and brightness still use different backends for the actual change, but
+both get native HUD display -- volume through the media key doing the change, brightness through
+`DisplayServices` doing the change followed by a media key triggering the indicator.
 
 ## Architecture
 
 Two layers, split by testability:
 
 ```
-┌─────────────────────────── LedgeCore (pure Swift, cross-platform) ───────────────────────────┐
-│  TouchFrame  →  GestureEngine  →  [GestureEvent]                                             │
-│                                                                                              │
-│  No AppKit, no system calls. Fully unit tested, including on Linux.                           │
-└──────────────────────────────────────────────────────────────────────────────────────────────┘
-                                          ▲                    │
++------------------------------- LedgeCore (pure Swift, cross-platform) ------------------------+
+|  TouchFrame  ->  GestureEngine  ->  [GestureEvent]                                           |
+|                                                                                              |
+|  No AppKit, no system calls. Fully unit tested, including on Linux.                          |
++----------------------------------------------------------------------------------------------+
+                                          ^                    |
                                    touch frames           gesture events
-                                          │                    ▼
-┌────────────────────────────── Ledge (macOS only, thin adapters) ─────────────────────────────┐
-│  EventTapTouchSource  ──▶  GestureController  ──▶  VolumeController / BrightnessController   │
-│                                    │                                                         │
-│                                    └──▶  Haptics, MenuBarController, DiagnosticsWindow       │
-└──────────────────────────────────────────────────────────────────────────────────────────────┘
+                                          |                    v
++------------------------------- Ledge (macOS only, thin adapters) -----------------------------+
+|  EventTapTouchSource  -->  GestureController  -->  VolumeController / BrightnessController    |
+|                                    |                                                         |
+|                                    +-->  MenuBarController, DiagnosticsWindow                 |
++----------------------------------------------------------------------------------------------+
 ```
 
 The split is deliberate: **all decision logic lives in `LedgeCore` where it can be tested**,
@@ -103,29 +114,53 @@ control but produces no HUD, so it is not the default.
 
 - `DisplayServicesGetBrightness`
 - `DisplayServicesSetBrightness`
-- `DisplayServicesBrightnessChanged` — notifies the system of the change, which is what
-  causes the OS to show its own indicator
+
+After setting the brightness value, the controller posts a synthesised brightness media key
+event (`NX_KEYTYPE_BRIGHTNESS_UP` or `NX_KEYTYPE_BRIGHTNESS_DOWN`). While this key does not
+change the brightness (that was already done by `DisplayServices`), it triggers the native
+HUD indicator to display the current brightness level.
 
 Loading by `dlsym` rather than linking means a missing symbol on a future macOS degrades to
 "brightness disabled, volume still works" instead of a launch failure.
 
 This is a private API. It is the accepted cost: `IODisplaySetFloatParameter` does not work
-for the built-in display on Apple Silicon, and synthesised brightness keys do not work
-either. Documented as the primary compatibility risk.
+for the built-in display on Apple Silicon, and synthesised brightness keys alone do not
+change the value. Documented as the primary compatibility risk.
 
-### Haptics
+### Cursor freeze
 
-`NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)`, one
-pulse per emitted step. Public API, trivial.
+When the "Freeze Cursor During Gesture" preference is enabled and a gesture is active, the
+event tap captures the cursor position at engagement and then warps the cursor back to that
+saved position on every `mouseMoved` event using `CGWarpMouseCursorPosition`. The event is
+also swallowed (returning nil from the tap callback) so that downstream consumers never see
+the movement.
+
+On disengage, the warp-back stops and cursor movement resumes normally.
+
+**Rejected approaches:**
+
+- **Returning nil for mouseMoved without warping:** The event tap can suppress events from
+  reaching other processes, but the window server has already moved the cursor by the time the
+  tap callback fires. Returning nil prevents apps from seeing the move but does not undo it.
+  The cursor still drifts.
+
+- **`CGAssociateMouseAndMouseCursorPosition(false)`:** This API is documented to disconnect
+  the cursor from mouse movement. On macOS 26 Tahoe it has no observable effect -- the cursor
+  continues to move regardless of the association state. This may be a regression or a
+  deliberate deprecation; either way it cannot be relied upon.
+
+The warp-per-event approach has a minor visual artifact: the cursor may flicker by one pixel
+on each event before being warped back. In practice this is not perceptible at normal frame
+rates.
 
 ### Gesture engine
 
 A state machine over touch frames:
 
 ```
-idle ──touch starts inside edge band──▶ armed ──vertical travel > activationDistance──▶ engaged
-  ▲                                       │                                             │
-  └───────────────────────────────────────┴─────────────────────────────────────────────┘
+idle --touch starts inside edge band--> armed --vertical travel > activationDistance--> engaged
+  ^                                       |                                             |
+  +---------------------------------------+---------------------------------------------+
                     finger lifts / drifts out of band / second finger / typing
 ```
 
@@ -150,37 +185,38 @@ constantly while scrolling and typing.
 | Optional bottom-quarter restriction | Off by default; available if false positives persist |
 
 Slidr's own changelog is instructive: v1.0 shipped the gesture, and bottom-quarter mode,
-typing detection, cursor freeze, and modifier keys arrived across v1.1–v1.3. Those are not
+typing detection, cursor freeze, and modifier keys arrived across v1.1-v1.3. Those are not
 features, they are false-positive fixes discovered in use. Shipping them in v1 is the single
 highest-value thing this design can borrow.
 
 ### Step granularity
 
-`stepDistance` defaults to `0.016` of trackpad height ≈ one full-height slide per 64 steps,
-matching the 64 sub-steps that fine volume mode provides. With fine mode off, the effective
-distance is multiplied by 4 to match the OS's 16 coarse steps, so a full slide still spans
-the whole range.
+`stepDistance` defaults to `0.016` of trackpad height, approximately one full-height slide per
+64 steps, matching the 64 sub-steps that fine volume mode provides. With fine mode off, the
+effective distance is multiplied by 4 to match the OS's 16 coarse steps, so a full slide still
+spans the whole range.
 
 ## Non-goals
 
-- External display brightness (DDC) — the user has no external display
-- Mac App Store distribution — impossible with private API, and not wanted
-- Configuration UI beyond a menu — the entire premise is that it works without setup
-- Custom HUD overlay — rely on the system indicator; revisit only if it proves absent
+- External display brightness (DDC) -- the user has no external display
+- Mac App Store distribution -- impossible with private API, and not wanted
+- Configuration UI beyond a menu -- the entire premise is that it works without setup
+- Haptic feedback -- `NSHapticFeedbackManager` does not work for LSUIElement apps, and the
+  `MTActuator` private API was deemed not worth the maintenance cost
 
 ## Risks
 
-| Risk | Severity | Mitigation |
+| Risk | Severity | Status |
 |---|---|---|
-| Gesture events from the tap may not carry single-finger touches | **High** — app is useless without input | Diagnostics window shows live touch data so the failure is diagnosable in seconds rather than guessed at |
-| `.shift`+`.option` flags may be ignored on synthesised events, leaving coarse steps | Medium | Menu toggle; diagnostics shows live volume so granularity is observable |
-| `DisplayServices` symbols may change or vanish | Medium | `dlsym` with graceful degradation |
-| Brightness change may not raise a HUD on Tahoe | Medium | Accepted for v1; custom overlay is the fallback plan |
-| Ad-hoc signature changes on rebuild can reset Accessibility permission | Low | Stable bundle identifier; documented in README |
+| Gesture events from the tap may not carry single-finger touches | **High** | **Resolved** -- confirmed working on device |
+| `.shift`+`.option` flags may be ignored on synthesised events, leaving coarse steps | Medium | **Resolved** -- fine mode works |
+| `DisplayServices` symbols may change or vanish | Medium | Mitigated by `dlsym` with graceful degradation |
+| Brightness HUD may not appear | Medium | **Resolved** -- synthesised media key after DisplayServices change triggers the native HUD |
+| Ad-hoc signature changes on rebuild can reset Accessibility permission | Low | Mitigated by stable bundle identifier; documented in README |
 
 ## Verification status
 
-**The macOS layer has never been compiled.** It was written in a Linux sandbox with no
-Xcode, no AppKit, and no Apple hardware. `LedgeCore` is fully built and tested there;
-everything under `Sources/Ledge/` is unverified and must be built and exercised on the
-target machine. `docs/PLAN.md` tracks exactly what needs checking.
+**The app has been compiled and verified on macOS 26.2 Tahoe.** `LedgeCore` is fully built and
+tested (54 unit tests passing on both Linux and macOS). The macOS adapter layer
+(`Sources/Ledge/`) has been compiled, run, and exercised on-device. Volume, brightness, cursor
+freeze, and gesture recognition are all confirmed working.
