@@ -41,7 +41,7 @@ BIN_DIR = $(shell swift build -c $(CONFIG) --show-bin-path)
 
 BUNDLE_ID := xyz.tuyennedd.ledge
 
-.PHONY: all build app install run test reset-permission clean
+.PHONY: all build app install reinstall run test reset-permission clean
 
 all: app
 
@@ -67,6 +67,14 @@ install: app
 	rm -rf "/Applications/$(APP_NAME).app"
 	cp -R "$(BUNDLE)" /Applications/
 	@echo "Installed /Applications/$(APP_NAME).app"
+
+## Quit, rebuild, install, and relaunch in one step. Useful during development when the app is
+## already running.
+reinstall:
+	osascript -e 'quit app "Ledge"' || true
+	sleep 1
+	$(MAKE) install
+	open /Applications/$(APP_NAME).app
 
 ## Launch the bundle, not the bare binary, so it runs under the identity that holds the
 ## Accessibility grant.
