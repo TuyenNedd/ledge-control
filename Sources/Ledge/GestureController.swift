@@ -28,6 +28,7 @@ final class GestureController {
     private let touchSource: TouchSource
     private let haptics: Haptics
     private let brightness: BrightnessController
+    private let brightnessHUD: BrightnessHUD
     private let mediaKeyVolume: VolumeAdjusting
     private let coreAudioVolume: VolumeAdjusting
 
@@ -47,6 +48,7 @@ final class GestureController {
         self.touchSource = touchSource
         self.haptics = Haptics(preferences: preferences)
         self.brightness = BrightnessController()
+        self.brightnessHUD = BrightnessHUD()
         self.mediaKeyVolume = VolumeController()
         self.coreAudioVolume = CoreAudioVolumeController()
         self.engine = GestureEngine(settings: preferences.gestureSettings)
@@ -130,7 +132,11 @@ final class GestureController {
         let fine = engine.settings.fineControl
         switch control {
         case .volume: volumeBackend.adjust(direction, fine: fine)
-        case .brightness: brightness.adjust(direction, fine: fine)
+        case .brightness:
+            brightness.adjust(direction, fine: fine)
+            if let level = brightness.currentBrightness() {
+                brightnessHUD.show(brightness: level)
+            }
         }
     }
 
@@ -150,6 +156,7 @@ final class GestureController {
     var isUsingCoreAudioVolume: Bool { preferences.useCoreAudioVolume }
     var isCursorLocked: Bool { engagedControl != nil && preferences.cursorFreezeEnabled }
     var hapticPulseCount: Int { haptics.pulseCount }
+    var brightnessHUDShowCount: Int { brightnessHUD.showCount }
 
     func currentVolumeScalar() -> Float? { volumeBackend.currentScalar() }
     func currentBrightness() -> Float? { brightness.currentBrightness() }
