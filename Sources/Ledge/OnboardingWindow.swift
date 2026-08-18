@@ -6,6 +6,9 @@ import SwiftUI
 /// Follows the same ownership pattern as `SettingsWindow` and `DiagnosticsWindow`: the window is
 /// `isReleasedWhenClosed = false` so the instance can be safely retained by `AppDelegate`, and
 /// the window is never resizable because the layout is fixed across three pages.
+///
+/// Uses an `OnboardingCoordinator` to wire the close action post-init, avoiding the previous
+/// pattern of replacing `hostingController.rootView` (which caused double view-tree construction).
 final class OnboardingWindow: NSObject, NSWindowDelegate {
     private let window: NSWindow
 
@@ -14,10 +17,11 @@ final class OnboardingWindow: NSObject, NSWindowDelegate {
     ///   - stepCountProvider: Closure that returns the current step count from the gesture controller.
     init(preferences: Preferences, stepCountProvider: @escaping () -> Int) {
         // UNVERIFIED: NSHostingController with SwiftUI view as root content for macOS 14+.
+        let coordinator = OnboardingCoordinator()
         let onboardingView = OnboardingView(
             preferences: preferences,
             stepCountProvider: stepCountProvider,
-            closeWindow: {}
+            coordinator: coordinator
         )
         let hostingController = NSHostingController(rootView: onboardingView)
 
@@ -36,16 +40,11 @@ final class OnboardingWindow: NSObject, NSWindowDelegate {
         window.center()
         window.contentViewController = hostingController
 
-        // Wire closeWindow after initialization so the closure can reference `window`.
-        // UNVERIFIED: mutating the rootView after assignment to contentViewController.
-        let windowRef = window
-        hostingController.rootView = OnboardingView(
-            preferences: preferences,
-            stepCountProvider: stepCountProvider,
-            closeWindow: { [weak windowRef] in
-                windowRef?.close()
-            }
-        )
+        // Wire the close action after window creation via the coordinator, no need to replace
+        // the rootView.
+        coordinator.closeAction = { [weak window] in
+            window?.close()
+        }
     }
 
     func show() {

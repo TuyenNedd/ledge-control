@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// A three-page onboarding flow shown on first launch.
@@ -11,15 +12,20 @@ import SwiftUI
 ///
 /// Navigation is via Next/Back buttons at the bottom. "Get Started" on the final page marks
 /// onboarding complete and closes the window.
-// UNVERIFIED: SwiftUI view with @State navigation, Timer, and NSImage bridging on macOS 14+.
+// UNVERIFIED: SwiftUI view with @State navigation, Timer.publish, and NSImage bridging on macOS 14+.
 struct OnboardingView: View {
     let preferences: Preferences
     let stepCountProvider: () -> Int
-    let closeWindow: () -> Void
+    let coordinator: OnboardingCoordinator
 
     @State private var currentPage = 0
     @State private var isAccessibilityGranted = false
     @State private var stepCount = 0
+
+    /// Timer publishers that SwiftUI manages automatically (cancelled when the view leaves the
+    /// hierarchy), fixing the timer leak from the original scheduledTimer approach.
+    private let accessibilityTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+    private let stepTimer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
 
     private let totalPages = 3
 
@@ -126,8 +132,10 @@ struct OnboardingView: View {
 
             Spacer()
         }
-        // UNVERIFIED: onAppear + Timer for polling AXIsProcessTrusted in SwiftUI.
-        .onAppear { startAccessibilityPolling() }
+        // UNVERIFIED: .onReceive with Timer.publish for polling AXIsProcessTrusted in SwiftUI.
+        .onReceive(accessibilityTimer) { _ in
+            isAccessibilityGranted = Permissions.isTrusted()
+        }
     }
 
     // MARK: - Page 3: Try It
@@ -173,8 +181,10 @@ struct OnboardingView: View {
 
             Spacer()
         }
-        // UNVERIFIED: onAppear + Timer for polling step count in SwiftUI.
-        .onAppear { startStepPolling() }
+        // UNVERIFIED: .onReceive with Timer.publish for polling step count in SwiftUI.
+        .onReceive(stepTimer) { _ in
+            stepCount = stepCountProvider()
+        }
     }
 
     // MARK: - Navigation
@@ -197,35 +207,26 @@ struct OnboardingView: View {
             } else {
                 Button("Get Started") {
                     preferences.hasCompletedOnboarding = true
-                    closeWindow()
+                    coordinator.close()
                 }
                 .buttonStyle(.borderedProminent)
             }
         }
     }
 
-    // MARK: - Polling
+    // MARK: - Polling (handled via .onReceive modifiers above)
+}
 
-    /// Polls `AXIsProcessTrusted()` every second to update the permission status live.
-    private func startAccessibilityPolling() {
-        // UNVERIFIED: Timer.scheduledTimer usage within SwiftUI view lifecycle on macOS 14+.
-        // Using a timer on the main run loop. The timer is not explicitly invalidated because
-        // SwiftUI view lifetime manages it implicitly when the view disappears; however, in
-        // practice it will keep running. A more robust approach would use .onReceive with a
-        // Timer.publish, but this matches the polling pattern from DiagnosticsWindow.
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            DispatchQueue.main.async {
-                isAccessibilityGranted = Permissions.isTrusted()
-            }
-        }
-    }
+/// Coordinator that allows the onboarding view to close its host window without requiring a
+/// closure that captures the window reference at view-init time. This avoids the double
+/// view-tree construction that occurred when `hostingController.rootView` was replaced after
+/// initial assignment.
+// UNVERIFIED: @Observable class used as a lightweight coordinator in SwiftUI on macOS 14+.
+@Observable
+final class OnboardingCoordinator {
+    var closeAction: (() -> Void)?
 
-    /// Polls the gesture controller's step count to show live feedback.
-    private func startStepPolling() {
-        Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { _ in
-            DispatchQueue.main.async {
-                stepCount = stepCountProvider()
-            }
-        }
+    func close() {
+        closeAction?()
     }
 }

@@ -18,11 +18,12 @@ struct GestureSettingsTab: View {
 
             Section("Edge Width") {
                 HStack {
-                    // UNVERIFIED: Slider with step parameter and custom formatting on macOS.
+                    // UNVERIFIED: Slider with step parameter and onEditingChanged on macOS.
                     Slider(
                         value: $viewModel.edgeBandWidth,
                         in: 0.01...0.10,
-                        step: 0.005
+                        step: 0.005,
+                        onEditingChanged: viewModel.sliderEditingChanged
                     )
                     Text(edgeBandWidthLabel)
                         .monospacedDigit()
@@ -35,7 +36,8 @@ struct GestureSettingsTab: View {
                     Slider(
                         value: $viewModel.activationDistance,
                         in: 0.01...0.10,
-                        step: 0.005
+                        step: 0.005,
+                        onEditingChanged: viewModel.sliderEditingChanged
                     )
                     Text(String(format: "%.3f", viewModel.activationDistance))
                         .monospacedDigit()

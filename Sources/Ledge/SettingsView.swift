@@ -26,20 +26,29 @@ struct SettingsView: View {
 ///
 /// Uses `@Observable` (macOS 14+) so that views can read properties directly without
 /// explicit `@Published` wrappers.
+///
+/// Slider values write to `Preferences` immediately (so the trackpad preview updates in
+/// real-time), but the heavier `applyPreferences()` call is deferred to when the slider
+/// drag ends via `applyIfNeeded()`. Toggle changes apply immediately since they are
+/// discrete events.
 // UNVERIFIED: @Observable macro on a class with explicit didSet calling side effects.
 @Observable
 final class SettingsViewModel {
     private let preferences: Preferences
     private let applyPreferencesClosure: () -> Void
 
+    /// Whether a slider is currently being dragged. When true, `didSet` writes to preferences
+    /// but does not call `applyPreferences()`.
+    var isEditingSlider: Bool = false
+
     // MARK: - Gesture settings
 
     var edgeBandWidth: Double {
-        didSet { writeGestureSettings(); applyPreferencesClosure() }
+        didSet { writeGestureSettings(); applyIfNotEditing() }
     }
 
     var activationDistance: Double {
-        didSet { writeGestureSettings(); applyPreferencesClosure() }
+        didSet { writeGestureSettings(); applyIfNotEditing() }
     }
 
     var fineControl: Bool {
@@ -69,11 +78,11 @@ final class SettingsViewModel {
     }
 
     var typingLockout: Double {
-        didSet { writeGestureSettings(); applyPreferencesClosure() }
+        didSet { writeGestureSettings(); applyIfNotEditing() }
     }
 
     var gestureTimeout: Double {
-        didSet { writeGestureSettings(); applyPreferencesClosure() }
+        didSet { writeGestureSettings(); applyIfNotEditing() }
     }
 
     var launchAtLogin: Bool {
@@ -99,6 +108,21 @@ final class SettingsViewModel {
 
         // UNVERIFIED: SMAppService.mainApp.status == .enabled for reading login item state.
         self.launchAtLogin = SMAppService.mainApp.status == .enabled
+    }
+
+    /// Called when a slider drag ends to apply the final value to the gesture engine.
+    func sliderEditingChanged(_ editing: Bool) {
+        isEditingSlider = editing
+        if !editing {
+            applyPreferencesClosure()
+        }
+    }
+
+    /// Applies preferences only when not in the middle of a slider drag.
+    private func applyIfNotEditing() {
+        if !isEditingSlider {
+            applyPreferencesClosure()
+        }
     }
 
     private func writeGestureSettings() {

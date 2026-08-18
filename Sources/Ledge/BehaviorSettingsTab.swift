@@ -21,7 +21,8 @@ struct BehaviorSettingsTab: View {
                     Slider(
                         value: $viewModel.typingLockout,
                         in: 0.2...2.0,
-                        step: 0.1
+                        step: 0.1,
+                        onEditingChanged: viewModel.sliderEditingChanged
                     )
                     .frame(width: 200)
                     Text(String(format: "%.1f s", viewModel.typingLockout))
@@ -35,7 +36,8 @@ struct BehaviorSettingsTab: View {
                     Slider(
                         value: $viewModel.gestureTimeout,
                         in: 0.1...1.0,
-                        step: 0.05
+                        step: 0.05,
+                        onEditingChanged: viewModel.sliderEditingChanged
                     )
                     .frame(width: 200)
                     Text(String(format: "%.2f s", viewModel.gestureTimeout))

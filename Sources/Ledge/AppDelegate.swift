@@ -39,6 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // still the right response to a failed start even when the user says yes immediately.
         Permissions.requestIfNeeded()
 
+        // Start the event tap before showing onboarding, so that the "Try It" page can actually
+        // detect gestures. If start() fails (permission denied), the onboarding page 3 step
+        // counter will remain at zero but the permission page guides the user correctly.
+        let startSucceeded = controller.start()
+
         // Show the onboarding flow on first launch. The onboarding window polls AXIsProcessTrusted
         // itself and provides step-count feedback by reading from the controller.
         if !preferences.hasCompletedOnboarding {
@@ -50,7 +55,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onboarding.show()
         }
 
-        if !controller.start() {
+        if !startSucceeded {
             presentPermissionAlert(diagnostics: diagnostics)
         }
     }
