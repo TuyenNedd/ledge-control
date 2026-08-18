@@ -217,19 +217,13 @@ final class EventTapTouchSource: TouchSource {
             return Unmanaged.passUnretained(event)
 
         case CGEventType.mouseMoved.rawValue, CGEventType.leftMouseDragged.rawValue:
-            // The one thing this tap suppresses, and only while a gesture actually owns a
-            // control. Both flags are set from outside — whether a gesture is engaged is the
-            // engine's judgement, and whether freezing is wanted is the user's — so there is no
-            // decision being made here, only two answers being combined.
-            //
-            // UNVERIFIED: that deleting these events actually holds the cursor still. A session
-            // tap at `.headInsertEventTap` sees them before any application does, but the pointer
-            // is moved by WindowServer and it is not certain that a deleted event un-moves it. If
-            // the cursor still drifts during a gesture, the fallback is to re-warp it with
-            // `CGWarpMouseCursorPosition` to the position captured at engagement — which is
-            // heavier, and is why it is not the first attempt.
-            let shouldFreeze = isGestureEngaged && cursorFreezeEnabled
-            return shouldFreeze ? nil : Unmanaged.passUnretained(event)
+            // Pass through unconditionally. Cursor freeze is now handled at the WindowServer
+            // level via CGAssociateMouseAndMouseCursorPosition (driven by GestureController on
+            // engage/disengage), which stops the pointer from moving before events even reach the
+            // tap. Swallowing events here never worked: WindowServer applies pointer movement
+            // before the event reaches any tap, so returning nil only hid the event from apps
+            // without undoing the cursor motion.
+            return Unmanaged.passUnretained(event)
 
         default:
             // Everything else in the session, which since the mask widened to all events means

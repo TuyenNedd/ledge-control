@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import LedgeCore
 
@@ -101,8 +102,14 @@ final class GestureController {
             switch event {
             case .engaged(let control):
                 engagedControl = control
+                if preferences.cursorFreezeEnabled {
+                    CGAssociateMouseAndMouseCursorPosition(0)
+                }
             case .disengaged:
                 engagedControl = nil
+                if preferences.cursorFreezeEnabled {
+                    CGAssociateMouseAndMouseCursorPosition(1)
+                }
             case .step(let control, let direction):
                 perform(control, direction)
                 stepCount += 1
@@ -141,6 +148,8 @@ final class GestureController {
     var eventCount: Int { touchSource.eventCount }
     var isBrightnessAvailable: Bool { brightness.isAvailable }
     var isUsingCoreAudioVolume: Bool { preferences.useCoreAudioVolume }
+    var isCursorLocked: Bool { engagedControl != nil && preferences.cursorFreezeEnabled }
+    var hapticPulseCount: Int { haptics.pulseCount }
 
     func currentVolumeScalar() -> Float? { volumeBackend.currentScalar() }
     func currentBrightness() -> Float? { brightness.currentBrightness() }
