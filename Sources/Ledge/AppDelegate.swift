@@ -84,7 +84,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if Permissions.isTrusted() {
                     timer.invalidate()
                     if let controller = self?.controller, controller.start() {
-                        // Tap started successfully
+                        // Tap started — bring the onboarding window back to front so the user
+                        // sees the status change and can proceed to "Try It"
+                        self?.onboardingWindow?.show()
                     } else {
                         self?.relaunch()
                     }
