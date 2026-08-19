@@ -14,19 +14,21 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     ///   - applyPreferences: Called after any setting changes so the controller re-reads values.
     init(preferences: Preferences, applyPreferences: @escaping () -> Void) {
         let viewModel = SettingsViewModel(preferences: preferences, applyPreferences: applyPreferences)
-        // UNVERIFIED: NSHostingController with SwiftUI view as root content for macOS 14+.
         let hostingController = NSHostingController(rootView: SettingsView(viewModel: viewModel))
 
-        let contentFrame = NSRect(x: 0, y: 0, width: 500, height: 400)
+        let contentFrame = NSRect(x: 0, y: 0, width: 680, height: 500)
         window = NSWindow(
             contentRect: contentFrame,
-            styleMask: [.titled, .closable],
+            styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         super.init()
 
-        window.title = "Ledge Settings"
+        // Hide the title text but keep the traffic lights (close button)
+        window.title = ""
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.center()
