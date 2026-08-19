@@ -2,85 +2,81 @@ import SwiftUI
 
 /// A visual preview of the trackpad with edge band overlays.
 ///
-/// Shows a rounded rectangle representing the trackpad surface, with semi-transparent blue
-/// bands on left and right edges that span the full height and sit flush with (or slightly
-/// outside) the trackpad boundary — matching the screenshot reference where the bands wrap
-/// around the corners.
-///
-/// Optionally shows a live finger indicator dot when `fingerPosition` is provided, and
-/// a pulse glow animation on the edge bands when `isEngaged` is true.
+/// Shows a rounded rectangle representing the trackpad surface with a visible border,
+/// and semi-transparent blue bands on left and right edges that light up when engaged.
+/// No finger-tracking dot — the bands themselves are the feedback.
 struct TrackpadPreviewView: View {
     @Binding var edgeBandWidth: Double
     var swapSides: Bool
-    /// Optional live finger position mapped to 0...1 normalized space (origin lower-left).
-    /// When nil, the finger indicator is hidden.
-    var fingerPosition: CGPoint?
-    /// Whether the gesture is currently engaged (finger in an edge band and active).
-    var isEngaged: Bool
+    /// Which edge is currently engaged: "left", "right", or nil.
+    var engagedEdge: String?
 
-    init(edgeBandWidth: Binding<Double>, swapSides: Bool, fingerPosition: CGPoint? = nil, isEngaged: Bool = false) {
+    init(edgeBandWidth: Binding<Double>, swapSides: Bool, engagedEdge: String? = nil) {
         self._edgeBandWidth = edgeBandWidth
         self.swapSides = swapSides
-        self.fingerPosition = fingerPosition
-        self.isEngaged = isEngaged
+        self.engagedEdge = engagedEdge
     }
 
-    @State private var edgePulse = false
-
-    private var leftLabel: String {
-        swapSides ? "Volume" : "Brightness"
-    }
-
-    private var rightLabel: String {
-        swapSides ? "Brightness" : "Volume"
+    // Keep old init for backwards compat (Settings tab uses fingerPosition/isEngaged)
+    init(edgeBandWidth: Binding<Double>, swapSides: Bool, fingerPosition: CGPoint?, isEngaged: Bool) {
+        self._edgeBandWidth = edgeBandWidth
+        self.swapSides = swapSides
+        self.engagedEdge = nil
     }
 
     private var mmLabel: String {
         String(format: "%.1f mm", edgeBandWidth * 160.0)
     }
 
+    private var leftBandActive: Bool {
+        engagedEdge == "left"
+    }
+
+    private var rightBandActive: Bool {
+        engagedEdge == "right"
+    }
+
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
             let height = geometry.size.height
-            // Band width proportional to the trackpad, but visually wide enough to see
-            let bandPixelWidth = max(CGFloat(edgeBandWidth) * width, 12)
+            let bandPixelWidth = max(CGFloat(edgeBandWidth) * width, 14)
 
             ZStack {
-                // Blue edge bands as background — full height, rounded corners, sitting
-                // behind the trackpad surface. This gives the "bands wrapping around" look.
+                // Trackpad surface — darker than window background so it's always visible
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.blue.opacity(isEngaged && edgePulse ? 0.4 : 0.25))
+                    .fill(Color.gray.opacity(0.12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .strokeBorder(Color.gray.opacity(0.3), lineWidth: 1.5)
+                    )
 
-                // Trackpad surface (gray) inset from the bands
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-                    .padding(.leading, bandPixelWidth)
-                    .padding(.trailing, bandPixelWidth)
-
-                // Finger indicator dot
-                if let pos = fingerPosition {
-                    let dotX = pos.x * width
-                    let dotY = (1 - pos.y) * height
-                    Circle()
-                        .fill(isEngaged ? Color.blue.opacity(0.8) : Color.gray.opacity(0.5))
-                        .frame(width: 12, height: 12)
-                        .position(x: dotX, y: dotY)
+                // Left edge band
+                HStack(spacing: 0) {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(leftBandActive ? Color.blue.opacity(0.6) : Color.blue.opacity(0.2))
+                        .frame(width: bandPixelWidth, height: height - 6)
+                        .animation(.easeInOut(duration: 0.2), value: leftBandActive)
+                    Spacer()
                 }
+                .padding(.horizontal, 3)
+
+                // Right edge band
+                HStack(spacing: 0) {
+                    Spacer()
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(rightBandActive ? Color.blue.opacity(0.6) : Color.blue.opacity(0.2))
+                        .frame(width: bandPixelWidth, height: height - 6)
+                        .animation(.easeInOut(duration: 0.2), value: rightBandActive)
+                }
+                .padding(.horizontal, 3)
+
+                // Center mm label
+                Text(mmLabel)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
         }
         .aspectRatio(3.0 / 2.0, contentMode: .fit)
-        .onChange(of: isEngaged) { _, newValue in
-            if newValue {
-                withAnimation(.easeInOut(duration: 0.3).repeatCount(2, autoreverses: true)) {
-                    edgePulse = true
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    edgePulse = false
-                }
-            } else {
-                edgePulse = false
-            }
-        }
     }
 }

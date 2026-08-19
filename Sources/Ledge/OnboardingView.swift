@@ -30,10 +30,13 @@ struct OnboardingView: View {
     @State private var accessibilityCheckEnabled = false
 
     // Live tracking state
-    @State private var fingerPosition: CGPoint?
-    @State private var isEngaged = false
+    @State private var engagedEdge: String?
     @State private var volumeLevel: Float = 0
     @State private var brightnessLevel: Float = 0
+
+    // Completion tracking: must slide BOTH sides
+    @State private var hasUsedLeft = false
+    @State private var hasUsedRight = false
 
     // Animation state
     @State private var arrowOffset: CGFloat = -10
@@ -50,6 +53,18 @@ struct OnboardingView: View {
 
     private var rightLabel: String {
         preferences.gestureSettings.swapSides ? "Brightness" : "Volume"
+    }
+
+    private var instructionText: String {
+        if hasUsedLeft && hasUsedRight {
+            return ""
+        } else if hasUsedRight && !hasUsedLeft {
+            return "Now try the left edge"
+        } else if hasUsedLeft && !hasUsedRight {
+            return "Now try the right edge"
+        } else {
+            return "Slide along either edge to try"
+        }
     }
 
     /// Timer publishers that SwiftUI manages automatically (cancelled when the view leaves the
@@ -205,8 +220,7 @@ struct OnboardingView: View {
                     TrackpadPreviewView(
                         edgeBandWidth: .constant(preferences.gestureSettings.edgeBandWidth),
                         swapSides: preferences.gestureSettings.swapSides,
-                        fingerPosition: fingerPosition,
-                        isEngaged: isEngaged
+                        engagedEdge: engagedEdge
                     )
 
                     // Animated arrow hint (visible only when no steps detected yet)
@@ -254,7 +268,7 @@ struct OnboardingView: View {
             .frame(height: 160)
             .padding(.horizontal, 40)
 
-            Text("Slide along the right edge now")
+            Text(instructionText)
                 .font(.body)
                 .foregroundStyle(.secondary)
 
@@ -294,41 +308,48 @@ struct OnboardingView: View {
                     }
                 }
 
-                // Celebration at 5 steps
-                if newStepCount >= 5 && !stepCelebrated {
-                    stepCelebrated = true
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
-                        celebrationScale = 1.1
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
-                            celebrationScale = 1.0
-                        }
-                    }
-                    // Pulse the Get Started button
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
-                        getStartedScale = 1.08
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
-                            getStartedScale = 1.0
-                        }
-                    }
-                }
-
                 previousStepCount = newStepCount
             }
             stepCount = newStepCount
 
-            // Update finger position
-            if let pos = touchPositionProvider() {
-                fingerPosition = CGPoint(x: pos.x, y: pos.y)
+            // Update engaged edge from provider
+            let engaged = isEngagedProvider()
+            if engaged {
+                // Determine which edge based on touch position
+                if let pos = touchPositionProvider() {
+                    let bandWidth = preferences.gestureSettings.edgeBandWidth
+                    if pos.x < bandWidth {
+                        engagedEdge = "left"
+                        hasUsedLeft = true
+                    } else if pos.x > (1.0 - bandWidth) {
+                        engagedEdge = "right"
+                        hasUsedRight = true
+                    }
+                }
             } else {
-                fingerPosition = nil
+                engagedEdge = nil
             }
 
-            // Update engaged state
-            isEngaged = isEngagedProvider()
+            // Check both-sides completion for celebration
+            if hasUsedLeft && hasUsedRight && !stepCelebrated {
+                stepCelebrated = true
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                    celebrationScale = 1.1
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                        celebrationScale = 1.0
+                    }
+                }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                    getStartedScale = 1.08
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                        getStartedScale = 1.0
+                    }
+                }
+            }
 
             // Update volume/brightness levels directly
             volumeLevel = volumeProvider() ?? 0
@@ -345,7 +366,7 @@ struct OnboardingView: View {
     private var stepCountView: some View {
         HStack(spacing: 8) {
             if stepCelebrated {
-                // Celebration state
+                // Both sides tried — celebration state
                 Image(systemName: "checkmark.circle.fill")
                     .font(.title3)
                     .foregroundStyle(.green)
@@ -356,14 +377,27 @@ struct OnboardingView: View {
             } else {
                 Image(systemName: "hand.draw")
                     .font(.title3)
-                if stepCount == 0 {
-                    Text("Waiting for gestures...")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text("Steps detected: \(stepCount)")
-                        .font(.body)
-                        .foregroundStyle(.primary)
+                HStack(spacing: 4) {
+                    // Show which sides have been tried
+                    if hasUsedLeft {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                        Text(leftLabel)
+                            .font(.caption)
+                    }
+                    if hasUsedRight {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                        Text(rightLabel)
+                            .font(.caption)
+                    }
+                    if !hasUsedLeft && !hasUsedRight {
+                        Text("Waiting for gestures...")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
