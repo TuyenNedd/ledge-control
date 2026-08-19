@@ -17,10 +17,8 @@ struct SettingsView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selectedTab) {
-                Section("Settings") {
-                    Label("General", systemImage: "gearshape")
-                        .tag(SettingsTab.general)
-                }
+                Label("General", systemImage: "gearshape")
+                    .tag(SettingsTab.general)
 
                 Section("Features") {
                     Label("Gesture", systemImage: "hand.draw")
