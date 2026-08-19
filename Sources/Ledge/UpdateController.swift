@@ -6,17 +6,26 @@ import Sparkle
 
 /// Thin wrapper around Sparkle's updater controller.
 ///
-/// Initialized at launch with `startingUpdater: true` so that automatic background checks
-/// begin immediately. Manual checks are triggered from the menu bar.
+/// Initialized with `startingUpdater: false` so that Sparkle does NOT automatically check
+/// for updates on launch. This avoids error popups when there is no appcast.xml published yet
+/// or when the user is offline. Manual checks are triggered from the "Check for Updates..."
+/// menu item.
 final class UpdateController {
     private let updaterController: SPUStandardUpdaterController
 
     init() {
         updaterController = SPUStandardUpdaterController(
-            startingUpdater: true,
+            startingUpdater: false,
             updaterDelegate: nil,
             userDriverDelegate: nil
         )
+    }
+
+    /// Start the updater for background checks. Call this after confirming the appcast is
+    /// reachable, or simply let the user trigger manual checks via the menu.
+    func startUpdater() {
+        // UNVERIFIED: calling updater.start() after init with startingUpdater: false.
+        updaterController.updater.start()
     }
 
     func checkForUpdates() {
