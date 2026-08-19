@@ -18,16 +18,12 @@ needing to find Keychain Access in the GUI.
 
 ## What it does
 
-The `make cert` target runs:
+The `make cert` target runs `scripts/create-cert.sh`, which:
 
-```bash
-security create-keychain -p "" ledge-dev.keychain-db 2>/dev/null || true
-security default-keychain -s login.keychain-db
-security find-identity -v -p codesigning | grep -q "Ledge Dev" || \
-    security create-identity -s "Ledge Dev" -t codeSign -p codesigning login.keychain-db
-```
-
-If a certificate named "Ledge Dev" already exists, it does nothing.
+1. Checks if "Ledge Dev" already exists in the keychain (skips if so)
+2. Generates a self-signed certificate with OpenSSL (RSA 2048, valid 10 years, code signing only)
+3. Imports it into your login keychain
+4. Sets the partition list so `codesign` can use it without prompting
 
 ## Verify
 
