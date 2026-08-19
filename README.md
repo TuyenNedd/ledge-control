@@ -7,6 +7,13 @@ the whole range. Lives in the menu bar. No configuration required.
 
 ---
 
+## Download
+
+Grab the latest `.dmg` from [GitHub Releases](https://github.com/TuyenNedd/ledge-control/releases).
+Open the disk image, drag Ledge.app to Applications, and follow the first-run instructions inside.
+
+---
+
 ## How it works
 
 Two layers, split by what can be tested.
@@ -83,6 +90,31 @@ Then launch it from `/Applications`, grant Accessibility permission when asked, 
 it can never hold the Accessibility permission the app depends on.
 
 Other targets: `make build`, `make test`, `make reset-permission`, `make clean`.
+
+---
+
+## For developers
+
+**Development (persistent Accessibility permission across rebuilds):**
+
+```bash
+make cert           # one-time: create a self-signed "Ledge Dev" certificate (see docs/CERTIFICATE.md)
+make reinstall      # quit, rebuild, install to /Applications, and relaunch
+```
+
+The stable certificate means the Accessibility grant survives rebuilds without needing
+`make reset-permission` after every change.
+
+**Distribution (ad-hoc signed `.dmg` for sharing):**
+
+```bash
+make dmg            # builds with ad-hoc signing and packages dist/Ledge-<version>.dmg
+```
+
+The `.dmg` includes a symlink to `/Applications` for drag-to-install and a `FIRST-RUN.txt`
+explaining how to bypass Gatekeeper on first launch.
+
+---
 
 ### Why a bundle and not just a binary
 
