@@ -60,9 +60,15 @@ app: build
 	@# Add rpath so the binary finds frameworks in Contents/Frameworks/
 	install_name_tool -add_rpath @executable_path/../Frameworks "$(CONTENTS)/MacOS/$(APP_NAME)" 2>/dev/null || true
 	@# Copy Sparkle.framework into the bundle so the dynamic linker can find it at @rpath
-	@SPARKLE_PATH=$$(find .build -path "*/artifacts/Sparkle/Sparkle.framework" -type d 2>/dev/null | head -1); \
+	@SPARKLE_PATH=$$(find .build -path "*/release/Sparkle.framework" -type d 2>/dev/null | head -1); \
+	if [ -z "$$SPARKLE_PATH" ]; then \
+		SPARKLE_PATH=$$(find .build -path "*/Sparkle.framework" -type d 2>/dev/null | head -1); \
+	fi; \
 	if [ -n "$$SPARKLE_PATH" ]; then \
 		cp -R "$$SPARKLE_PATH" "$(CONTENTS)/Frameworks/Sparkle.framework"; \
+		echo "Copied $$SPARKLE_PATH"; \
+	else \
+		echo "WARNING: Sparkle.framework not found in .build/"; \
 	fi
 	codesign --force --deep --sign "$(SIGNING_IDENTITY)" "$(BUNDLE)"
 	@echo "Built $(BUNDLE) — verify with: codesign -dv $(BUNDLE)"
