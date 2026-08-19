@@ -30,7 +30,7 @@
 
 CONFIG ?= release
 APP_NAME := Ledge
-SIGNING_IDENTITY ?= Ledge Dev
+SIGNING_IDENTITY ?= Apple Development: trituyen2003@gmail.com (NZFRWQGKR8)
 BUNDLE := dist/$(APP_NAME).app
 CONTENTS := $(BUNDLE)/Contents
 
@@ -127,10 +127,24 @@ run: app
 ##
 ## Run this whenever the app claims it has no permission while the settings pane shows it enabled.
 ## Quit the app first; then relaunch and grant when prompted.
-## Create a self-signed code signing certificate named "Ledge Dev" in the login keychain.
-## Only needs to be run once per machine. If the certificate already exists, does nothing.
+## Ensure the Apple WWDR intermediate certificate is in the keychain so the Apple Development
+## identity is trusted. Only needed once — after creating the cert in Xcode.
+## For a fresh machine: open Xcode → Settings → Accounts → Manage Certificates → + Apple Development
 cert:
-	@bash scripts/create-cert.sh
+	@if security find-identity -v -p codesigning | grep -q "Apple Development"; then \
+		echo "Apple Development certificate is valid and trusted."; \
+	else \
+		echo "Downloading Apple WWDR intermediate certificate..."; \
+		curl -sO https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer; \
+		security import AppleWWDRCAG3.cer -k ~/Library/Keychains/login.keychain-db; \
+		rm -f AppleWWDRCAG3.cer; \
+		if security find-identity -v -p codesigning | grep -q "Apple Development"; then \
+			echo "Done! Certificate is now trusted."; \
+		else \
+			echo "Certificate still not valid. Open Xcode → Settings → Accounts → Manage Certificates → + Apple Development"; \
+			exit 1; \
+		fi; \
+	fi
 
 reset-permission:
 	tccutil reset Accessibility $(BUNDLE_ID)
