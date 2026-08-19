@@ -1,44 +1,82 @@
 import SwiftUI
 import ServiceManagement
 
-/// The root SwiftUI view for the Settings window, using a sidebar navigation style.
-// UNVERIFIED: NavigationSplitView on macOS 14+ for settings sidebar.
+/// The root SwiftUI view for the Settings window, using a sidebar with grouped sections.
 struct SettingsView: View {
     var viewModel: SettingsViewModel
 
-    @State private var selectedTab: SettingsTab = .gesture
+    @State private var selectedTab: SettingsTab = .general
 
-    enum SettingsTab: String, CaseIterable {
+    enum SettingsTab: String, Hashable {
+        case general = "General"
         case gesture = "Gesture"
         case behavior = "Behavior"
         case about = "About"
-
-        var icon: String {
-            switch self {
-            case .gesture: return "hand.draw"
-            case .behavior: return "gearshape"
-            case .about: return "info.circle"
-            }
-        }
     }
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsTab.allCases, id: \.self, selection: $selectedTab) { tab in
-                Label(tab.rawValue, systemImage: tab.icon)
+            List(selection: $selectedTab) {
+                Section("Settings") {
+                    Label("General", systemImage: "gearshape")
+                        .tag(SettingsTab.general)
+                }
+
+                Section("Features") {
+                    Label("Gesture", systemImage: "hand.draw")
+                        .tag(SettingsTab.gesture)
+                    Label("Behavior", systemImage: "slider.horizontal.3")
+                        .tag(SettingsTab.behavior)
+                }
+
+                Section("System") {
+                    Label("About", systemImage: "info.circle")
+                        .tag(SettingsTab.about)
+                }
             }
-            .navigationSplitViewColumnWidth(min: 140, ideal: 160, max: 180)
+            .listStyle(.sidebar)
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 220)
         } detail: {
-            switch selectedTab {
-            case .gesture:
-                GestureSettingsTab(viewModel: viewModel)
-            case .behavior:
-                BehaviorSettingsTab(viewModel: viewModel)
-            case .about:
-                AboutTab()
+            ScrollView {
+                switch selectedTab {
+                case .general:
+                    GeneralSettingsTab(viewModel: viewModel)
+                case .gesture:
+                    GestureSettingsTab(viewModel: viewModel)
+                case .behavior:
+                    BehaviorSettingsTab(viewModel: viewModel)
+                case .about:
+                    AboutTab()
+                }
             }
         }
-        .frame(width: 580, height: 400)
+        .frame(width: 680, height: 500)
+    }
+}
+
+/// General tab — launch at login, enable/disable.
+struct GeneralSettingsTab: View {
+    var viewModel: SettingsViewModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("GENERAL")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 20)
+
+            Toggle("Enable Ledge", isOn: Binding(
+                get: { viewModel.isEnabled },
+                set: { viewModel.isEnabled = $0 }
+            ))
+
+            Toggle("Launch at login", isOn: Binding(
+                get: { viewModel.launchAtLogin },
+                set: { viewModel.launchAtLogin = $0 }
+            ))
+        }
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
