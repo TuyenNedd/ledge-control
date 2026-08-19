@@ -50,6 +50,6 @@
 	<key>SUPublicEDKey</key>
 	<string></string>
 	<key>SUEnableAutomaticChecks</key>
-	<true/>
+	<false/>
 </dict>
 </plist>
