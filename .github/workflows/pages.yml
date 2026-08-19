@@ -3,6 +3,8 @@ name: Deploy Appcast
 on:
   push:
     branches: [gh-pages]
+  # This workflow only runs when the gh-pages branch is updated (by the release workflow).
+  # It will fail if gh-pages doesn't exist yet — that's expected until the first release.
 
 permissions:
   pages: write
@@ -14,6 +16,7 @@ concurrency:
 
 environment:
   name: github-pages
+  url: ${{ steps.deployment.outputs.page_url }}
 
 jobs:
   deploy:
@@ -29,4 +32,5 @@ jobs:
         with:
           path: '.'
 
-      - uses: actions/deploy-pages@v4
+      - id: deployment
+        uses: actions/deploy-pages@v4
