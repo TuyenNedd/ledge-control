@@ -24,8 +24,7 @@ final class UpdateController {
     /// Start the updater for background checks. Call this after confirming the appcast is
     /// reachable, or simply let the user trigger manual checks via the menu.
     func startUpdater() {
-        // UNVERIFIED: calling updater.start() after init with startingUpdater: false.
-        updaterController.updater.start()
+        try? updaterController.updater.start()
     }
 
     func checkForUpdates() {
