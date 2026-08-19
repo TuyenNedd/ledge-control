@@ -15,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: GestureController?
     private var menuBar: MenuBarController?
     private var diagnostics: DiagnosticsWindow?
+    private var settingsWindow: SettingsWindow?
+    private var onboardingWindow: OnboardingWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let controller = GestureController(preferences: preferences, touchSource: touchSource)
@@ -23,16 +25,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let diagnostics = DiagnosticsWindow(controller: controller)
         self.diagnostics = diagnostics
 
+        let settingsWindow = SettingsWindow(preferences: preferences) { [weak controller] in
+            controller?.applyPreferences()
+        }
+        self.settingsWindow = settingsWindow
+
         let menuBar = MenuBarController(preferences: preferences, controller: controller)
         menuBar.onShowDiagnostics = { diagnostics.show() }
+        menuBar.onShowSettings = { settingsWindow.show() }
         self.menuBar = menuBar
 
-        // Prompts if needed. Granting does not take effect until relaunch, so the alert below is
-        // still the right response to a failed start even when the user says yes immediately.
-        Permissions.requestIfNeeded()
+        if !preferences.hasCompletedOnboarding {
+            // First launch: onboarding handles everything. Do NOT call Permissions.isTrusted()
+            // or requestIfNeeded() here — on macOS 26, even a check-only call to
+            // AXIsProcessTrustedWithOptions can trigger the system "Accessibility Access" dialog
+            // the first time it sees this app, and that dialog appearing ON TOP of our onboarding
+            // window is confusing. The onboarding permission page has its own "Open System
+            // Settings" button and polls only AFTER a 3-second delay to let its window appear first.
+            let onboarding = OnboardingWindow(
+                preferences: preferences,
+                stepCountProvider: { [weak controller] in controller?.stepCount ?? 0 },
+                touchPositionProvider: { [weak controller] in
+                    guard let pos = controller?.lastFrame?.touches.first?.position else { return nil }
+                    return (x: pos.x, y: pos.y)
+                },
+                isEngagedProvider: { [weak controller] in controller?.engagedControl != nil },
+                volumeProvider: { [weak controller] in controller?.currentVolumeScalar() },
+                brightnessProvider: { [weak controller] in controller?.currentBrightness() }
+            )
+            self.onboardingWindow = onboarding
+            onboarding.show()
 
-        if !controller.start() {
-            presentPermissionAlert(diagnostics: diagnostics)
+            // Poll for permission in the background. Once granted, start the tap and relaunch
+            // so the onboarding "Try It" page can work.
+            startPollingForPermission()
+        } else {
+            // Not first launch. Try to start silently — if permission exists, great.
+            // If not, just poll in the background and auto-start/relaunch when granted.
+            // No alert shown — the user already went through onboarding and knows what to do.
+            if Permissions.isTrusted() {
+                _ = controller.start()
+            } else {
+                startPollingForPermission()
+            }
         }
     }
 
@@ -40,44 +75,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller?.stop()
     }
 
-    /// The tap could not be created, which in practice means one thing.
-    ///
-    /// Offers the diagnostics window as well as System Settings, because the readout states
-    /// whether the process is trusted — which is how a user tells "I have not granted it" from
-    /// "I granted it and it still is not working."
-    private func presentPermissionAlert(diagnostics: DiagnosticsWindow) {
-        let alert = NSAlert()
-        alert.messageText = "Ledge needs Accessibility permission."
-        alert.informativeText = """
-            Ledge reads trackpad touches through an event tap, which macOS only allows for apps \
-            trusted in Privacy & Security → Accessibility.
-
-            Grant permission there, then quit and relaunch Ledge — a newly granted tap does not \
-            take effect until the app restarts.
-            """
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Open Settings")
-        alert.addButton(withTitle: "Show Diagnostics")
-        alert.addButton(withTitle: "Later")
-
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            openAccessibilitySettings()
-        case .alertSecondButtonReturn:
-            diagnostics.show()
-        default:
-            break
-        }
-    }
-
     private func openAccessibilitySettings() {
-        // UNVERIFIED: this URL scheme is the long-standing one for the Accessibility pane, but the
-        // pane identifiers were reorganised in the System Settings rewrite and may have moved
-        // again in macOS 26. Worst case it opens System Settings at the wrong place, which is a
-        // small annoyance rather than a failure — the alert text says where to go.
         guard let url = URL(
             string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
         ) else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    /// Poll AXIsProcessTrusted every 2 seconds. When permission is granted, start the tap
+    /// (or relaunch if needed). Delays the first check by 3 seconds so the onboarding window
+    /// has time to appear before any system prompt that the first isTrusted() call may trigger.
+    private func startPollingForPermission() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] timer in
+                if Permissions.isTrusted() {
+                    timer.invalidate()
+                    if let controller = self?.controller, controller.start() {
+                        // Tap started — bring the onboarding window back to front so the user
+                        // sees the status change and can proceed to "Try It"
+                        self?.onboardingWindow?.show()
+                    } else {
+                        self?.relaunch()
+                    }
+                }
+            }
+        }
+    }
+
+    /// Quit and immediately relaunch the app.
+    private func relaunch() {
+        let url = URL(fileURLWithPath: Bundle.main.bundlePath)
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: url, configuration: config) { _, _ in }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            NSApp.terminate(nil)
+        }
     }
 }

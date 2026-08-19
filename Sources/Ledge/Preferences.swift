@@ -31,6 +31,7 @@ final class Preferences {
         static let cursorFreezeEnabled = "cursorFreezeEnabled"
         static let isEnabled = "isEnabled"
         static let useCoreAudioVolume = "useCoreAudioVolume"
+        static let hasCompletedOnboarding = "hasCompletedOnboarding"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -114,5 +115,13 @@ final class Preferences {
     var useCoreAudioVolume: Bool {
         get { defaults.bool(forKey: Key.useCoreAudioVolume) }
         set { defaults.set(newValue, forKey: Key.useCoreAudioVolume) }
+    }
+
+    /// Whether the user has completed the first-launch onboarding flow. Not registered as a
+    /// default because `bool(forKey:)` returns `false` for an unset key, which is exactly what
+    /// first launch needs: the onboarding will show.
+    var hasCompletedOnboarding: Bool {
+        get { defaults.bool(forKey: Key.hasCompletedOnboarding) }
+        set { defaults.set(newValue, forKey: Key.hasCompletedOnboarding) }
     }
 }

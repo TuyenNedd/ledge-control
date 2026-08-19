@@ -15,3 +15,6 @@ DerivedData/
 
 # macOS
 .DS_Store
+
+# Agent task artifacts
+.agents/

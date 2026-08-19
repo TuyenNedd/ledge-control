@@ -7,6 +7,21 @@ the whole range. Lives in the menu bar. No configuration required.
 
 ---
 
+## Download
+
+Grab the latest `.dmg` from [GitHub Releases](https://github.com/TuyenNedd/ledge-control/releases).
+Open the disk image, drag Ledge.app to Applications, and follow the first-run instructions inside.
+
+---
+
+## First launch
+
+On first launch, an onboarding flow guides you through granting Accessibility permission. The
+Settings window (⌘,) is available afterward for tuning preferences. If you ever need to re-grant
+permission, the onboarding will appear again automatically.
+
+---
+
 ## How it works
 
 Two layers, split by what can be tested.
@@ -84,30 +99,49 @@ it can never hold the Accessibility permission the app depends on.
 
 Other targets: `make build`, `make test`, `make reset-permission`, `make clean`.
 
+---
+
+## For developers
+
+**Development (persistent Accessibility permission across rebuilds):**
+
+```bash
+make cert           # one-time: create a self-signed "Ledge Dev" certificate (see docs/CERTIFICATE.md)
+make reinstall      # quit, rebuild, install to /Applications, and relaunch
+```
+
+The stable certificate means the Accessibility grant survives rebuilds without needing
+`make reset-permission` after every change.
+
+**Distribution (ad-hoc signed `.dmg` for sharing):**
+
+```bash
+make dmg            # builds with ad-hoc signing and packages dist/Ledge-<version>.dmg
+```
+
+The `.dmg` includes a symlink to `/Applications` for drag-to-install and a `FIRST-RUN.txt`
+explaining how to bypass Gatekeeper on first launch.
+
+---
+
 ### Why a bundle and not just a binary
 
 Accessibility permission is granted to a *bundle identity*, not to a file. `Resources/Info.plist`
 pins `CFBundleIdentifier` to `xyz.tuyennedd.ledge` and never changes it, which is the minimum
 required for the app to be able to hold the grant at all.
 
-### Expect to re-grant permission after every rebuild
+### Expect to re-grant permission (ad-hoc signing only)
 
-A fixed bundle identifier is not enough. macOS matches the *designated requirement* of the
-signature, and for the ad-hoc signature `make app` applies that requirement is derived from the
-binary's hash -- so a rebuilt app is, as far as permissions are concerned, a different program.
-
-The symptom is worse than a refusal: the app keeps its enabled checkbox in **Privacy & Security >
-Accessibility** while the grant does nothing, and `CGEvent.tapCreate` returns nil. That is
-indistinguishable from the event tap simply not working, so rule it out first:
+If you skip the certificate setup and use ad-hoc signing (`make app`), the Accessibility grant
+resets on every rebuild because macOS matches the binary's hash. The symptom is the app keeping
+its enabled checkbox in **Privacy & Security > Accessibility** while the grant does nothing.
 
 ```bash
 make reset-permission   # tccutil reset Accessibility xyz.tuyennedd.ledge
 ```
 
-Quit the app, run that, relaunch, grant again. To avoid it entirely without a paid Developer
-account, sign with a stable self-signed code-signing certificate from Keychain Access instead of
-ad-hoc -- an unchanging certificate gives an unchanging designated requirement. See the Makefile
-header.
+Quit the app, run that, relaunch, grant again. To avoid this, sign with a stable self-signed
+certificate as described in `docs/CERTIFICATE.md`.
 
 ---
 
@@ -116,13 +150,12 @@ header.
 The menu bar icon provides:
 
 - **Enabled** -- master toggle
-- **Swap Sides** -- swap volume/brightness edges
-- **Fine Control** -- 1/64 steps (on) vs 1/16 steps (off)
-- **Bottom Quarter Only** -- restrict gesture activation to the bottom quarter of the trackpad
-- **Freeze Cursor During Gesture** -- hold the pointer still while sliding
-- **Launch at Login** -- via SMAppService
-- **Diagnostics** -- live readout of touch data, engine state, volume, brightness
-- **Quit**
+- **Settings...** (⌘,) -- opens the Settings window for all preferences
+- **Diagnostics...** -- live readout of touch data, engine state, volume, brightness
+- **Quit Ledge**
+
+All toggles (Swap Sides, Fine Control, Bottom Quarter Only, Freeze Cursor, Launch at Login)
+have moved to the Settings window.
 
 ---
 
@@ -158,9 +191,10 @@ itself.
 - **A full-height slide covers ~62.5 steps, not 64,** so 0% to 100% is not quite reachable in one
   stroke. `stepDistance` is `0.016`, an approximation of `1/64`.
 - **External displays are out of scope.** Built-in only; no DDC.
-- **The Accessibility grant does not survive a rebuild** while the app is ad-hoc signed, and the
-  app looks enabled while it is not. `make reset-permission` after each build, or sign with a
-  stable self-signed certificate. See "Expect to re-grant permission after every rebuild" above.
+- **The Accessibility grant does not survive a rebuild with ad-hoc signing.** If you skip the
+  certificate setup (see "For developers" above), the app looks enabled in Privacy & Security
+  while the grant has no effect. Use `make reset-permission` after each build, or set up the
+  self-signed certificate to avoid this entirely.
 - **The event tap subscribes to every event type**, because per-type subscription is reported not
   to be honoured for gesture events. That means the tap callback runs for every event in the
   session. It does nothing but count and return for types it ignores, but if the tap starts being
