@@ -94,6 +94,15 @@ struct BehaviorSettingsTab: View {
             Text("How long a pause before a gesture is considered finished.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
+
+            // MARK: - Excluded Apps section
+            Text("EXCLUDED APPS")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .padding(.top, 24)
+
+            ExcludedAppsView(viewModel: viewModel)
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 16)

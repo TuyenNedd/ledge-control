@@ -8,12 +8,14 @@ import SwiftUI
 /// instance for the lifetime of the process.
 final class SettingsWindow: NSObject, NSWindowDelegate {
     private let window: NSWindow
+    private let viewModel: SettingsViewModel
 
     /// - Parameters:
     ///   - preferences: The shared preferences instance to read from and write to.
     ///   - applyPreferences: Called after any setting changes so the controller re-reads values.
     init(preferences: Preferences, applyPreferences: @escaping () -> Void) {
         let viewModel = SettingsViewModel(preferences: preferences, applyPreferences: applyPreferences)
+        self.viewModel = viewModel
         let hostingController = NSHostingController(rootView: SettingsView(viewModel: viewModel))
 
         let contentFrame = NSRect(x: 0, y: 0, width: 780, height: 580)
@@ -36,6 +38,9 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     }
 
     func show() {
+        // Capture the frontmost app before Settings takes focus, so "Add Current App" knows
+        // which app the user was working in.
+        viewModel.previousFrontmostApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         window.makeKeyAndOrderFront(nil)
         // Required because the app is `.accessory`: without this the window can appear behind
         // whatever the user was looking at.

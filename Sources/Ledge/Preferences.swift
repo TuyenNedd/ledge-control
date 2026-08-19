@@ -33,6 +33,7 @@ final class Preferences {
         static let useCoreAudioVolume = "useCoreAudioVolume"
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
         static let modifierKeyRequired = "modifierKeyRequired"
+        static let excludedApps = "excludedApps"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -139,5 +140,13 @@ final class Preferences {
             return mode
         }
         set { defaults.set(newValue.rawValue, forKey: Key.modifierKeyRequired) }
+    }
+
+    /// Bundle identifiers of apps that should disable gesture detection when frontmost.
+    ///
+    /// Stored as a string array in UserDefaults. Defaults to empty (no apps excluded).
+    var excludedApps: [String] {
+        get { defaults.stringArray(forKey: Key.excludedApps) ?? [] }
+        set { defaults.set(newValue, forKey: Key.excludedApps) }
     }
 }

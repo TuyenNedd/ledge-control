@@ -150,6 +150,14 @@ final class SettingsViewModel {
         didSet { preferences.modifierKeyRequired = modifierKeyRequired; applyPreferencesClosure() }
     }
 
+    var excludedApps: [String] {
+        didSet { preferences.excludedApps = excludedApps; applyPreferencesClosure() }
+    }
+
+    /// The bundle ID of the app that was frontmost before Settings opened. Set by the caller
+    /// when the settings window appears, so "Add Current App" has something to offer.
+    var previousFrontmostApp: String?
+
     var typingLockout: Double {
         didSet { writeGestureSettings(); applyIfNotEditing() }
     }
@@ -179,6 +187,7 @@ final class SettingsViewModel {
         self.cursorFreezeEnabled = preferences.cursorFreezeEnabled
         self.useCoreAudioVolume = preferences.useCoreAudioVolume
         self.modifierKeyRequired = preferences.modifierKeyRequired
+        self.excludedApps = preferences.excludedApps
 
         // UNVERIFIED: SMAppService.mainApp.status == .enabled for reading login item state.
         self.launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -190,6 +199,17 @@ final class SettingsViewModel {
         if !editing {
             applyPreferencesClosure()
         }
+    }
+
+    /// Add a bundle identifier to the exclusion list. No-op if already present.
+    func addExcludedApp(_ bundleID: String) {
+        guard !excludedApps.contains(bundleID) else { return }
+        excludedApps.append(bundleID)
+    }
+
+    /// Remove a bundle identifier from the exclusion list.
+    func removeExcludedApp(_ bundleID: String) {
+        excludedApps.removeAll { $0 == bundleID }
     }
 
     /// Applies preferences only when not in the middle of a slider drag.
