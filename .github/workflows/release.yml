@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: macos-14
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build DMG
+        run: make dmg
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Resources/Info.plist)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body: |
+            ## Download
+
+            Download `Ledge-${{ steps.version.outputs.version }}.dmg` below, open it, and drag Ledge.app to Applications.
+
+            ## First Run Guide
+
+            1. Drag Ledge.app to the Applications folder (shortcut is right here)
+
+            2. If macOS says "cannot be opened because the developer cannot be verified":
+               - Right-click (or Control-click) Ledge.app
+               - Click "Open" from the menu
+               - Click "Open" in the dialog
+               - (You only need to do this once)
+
+            3. Grant Accessibility permission when asked, then relaunch the app
+
+            4. Slide along the right edge of your trackpad - volume should change!
+
+            **Tips:**
+            - Settings: click the menu bar icon > Settings... (or Cmd+,)
+            - Left edge = brightness, right edge = volume
+            - The gesture zone is very close to the physical edge (~4mm)
+          files: dist/Ledge-${{ steps.version.outputs.version }}.dmg
