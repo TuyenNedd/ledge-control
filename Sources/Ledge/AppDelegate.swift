@@ -54,11 +54,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             startPollingForPermission()
         } else {
             // Not first launch. Try to start silently — if permission exists, great.
-            // If not, show our alert (never the system prompt).
+            // If not, just poll in the background and auto-start/relaunch when granted.
+            // No alert shown — the user already went through onboarding and knows what to do.
             if Permissions.isTrusted() {
                 _ = controller.start()
             } else {
-                presentPermissionAlert()
+                startPollingForPermission()
             }
         }
     }
@@ -67,35 +68,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller?.stop()
     }
 
-    /// The tap could not be created, which in practice means one thing.
-    ///
-    /// Offers to open System Settings, and once permission is granted the app relaunches itself
-    /// automatically. Also offers a manual "Relaunch Now" button for users who grant permission
-    /// in their own time.
-    private func presentPermissionAlert() {
-        let alert = NSAlert()
-        alert.messageText = "Ledge needs Accessibility permission."
-        alert.informativeText = """
-            Ledge reads trackpad touches through an event tap, which macOS only allows for apps \
-            trusted in Privacy & Security → Accessibility.
-
-            Grant permission there — the app will relaunch automatically once it detects the change.
-            """
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Open Settings")
-        alert.addButton(withTitle: "Relaunch Now")
-        alert.addButton(withTitle: "Later")
-
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            openAccessibilitySettings()
-            startPollingForPermission()
-        case .alertSecondButtonReturn:
-            relaunch()
-        default:
-            // "Later" — still poll in the background so it relaunches when granted
-            startPollingForPermission()
-        }
+    private func openAccessibilitySettings() {
+        guard let url = URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
+        ) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     /// Poll AXIsProcessTrusted every 2 seconds. When permission is granted, start the tap
@@ -106,9 +83,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] timer in
                 if Permissions.isTrusted() {
                     timer.invalidate()
-                    // Permission granted — try to start the tap directly rather than relaunching
                     if let controller = self?.controller, controller.start() {
-                        // Tap started successfully, no relaunch needed
+                        // Tap started successfully
                     } else {
                         self?.relaunch()
                     }
@@ -123,19 +99,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let config = NSWorkspace.OpenConfiguration()
         config.createsNewApplicationInstance = true
         NSWorkspace.shared.openApplication(at: url, configuration: config) { _, _ in }
-        // Give the new instance a moment to start before we terminate
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             NSApp.terminate(nil)
         }
-    }
-    private func openAccessibilitySettings() {
-        // UNVERIFIED: this URL scheme is the long-standing one for the Accessibility pane, but the
-        // pane identifiers were reorganised in the System Settings rewrite and may have moved
-        // again in macOS 26. Worst case it opens System Settings at the wrong place, which is a
-        // small annoyance rather than a failure — the alert text says where to go.
-        guard let url = URL(
-            string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-        ) else { return }
-        NSWorkspace.shared.open(url)
     }
 }
