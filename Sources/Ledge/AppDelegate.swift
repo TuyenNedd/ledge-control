@@ -66,9 +66,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// The tap could not be created, which in practice means one thing.
     ///
-    /// Offers the diagnostics window as well as System Settings, because the readout states
-    /// whether the process is trusted — which is how a user tells "I have not granted it" from
-    /// "I granted it and it still is not working."
+    /// Offers to open System Settings, and once permission is granted the app relaunches itself
+    /// automatically. Also offers a manual "Relaunch Now" button for users who grant permission
+    /// in their own time.
     private func presentPermissionAlert(diagnostics: DiagnosticsWindow) {
         let alert = NSAlert()
         alert.messageText = "Ledge needs Accessibility permission."
@@ -76,24 +76,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Ledge reads trackpad touches through an event tap, which macOS only allows for apps \
             trusted in Privacy & Security → Accessibility.
 
-            Grant permission there, then quit and relaunch Ledge — a newly granted tap does not \
-            take effect until the app restarts.
+            Grant permission there — the app will relaunch automatically once it detects the change.
             """
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Open Settings")
-        alert.addButton(withTitle: "Show Diagnostics")
+        alert.addButton(withTitle: "Relaunch Now")
         alert.addButton(withTitle: "Later")
 
         switch alert.runModal() {
         case .alertFirstButtonReturn:
             openAccessibilitySettings()
+            startPollingForPermission()
         case .alertSecondButtonReturn:
-            diagnostics.show()
+            relaunch()
         default:
-            break
+            // "Later" — still poll in the background so it relaunches when granted
+            startPollingForPermission()
         }
     }
 
+    /// Poll AXIsProcessTrusted every 2 seconds. When permission is granted, relaunch
+    /// automatically so the event tap can be created.
+    private func startPollingForPermission() {
+        Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] timer in
+            if Permissions.isTrusted() {
+                timer.invalidate()
+                self?.relaunch()
+            }
+        }
+    }
+
+    /// Quit and immediately relaunch the app.
+    private func relaunch() {
+        let url = URL(fileURLWithPath: Bundle.main.bundlePath)
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: url, configuration: config) { _, _ in }
+        // Give the new instance a moment to start before we terminate
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            NSApp.terminate(nil)
+        }
+    }
     private func openAccessibilitySettings() {
         // UNVERIFIED: this URL scheme is the long-standing one for the Accessibility pane, but the
         // pane identifiers were reorganised in the System Settings rewrite and may have moved
