@@ -18,6 +18,9 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     /// Set by `AppDelegate`, which owns the settings window.
     var onShowSettings: (() -> Void)?
 
+    /// Set by `AppDelegate`, which owns the update controller.
+    var onCheckForUpdates: (() -> Void)?
+
     /// Each toggle paired with how to read its current value, so `menuNeedsUpdate(_:)` can refresh
     /// checkmarks in one loop instead of needing a stored property per item.
     ///
@@ -88,6 +91,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let diagnostics = NSMenuItem(title: "Diagnostics…", action: #selector(showDiagnostics), keyEquivalent: "")
         diagnostics.target = self
         menu.addItem(diagnostics)
+
+        let checkForUpdates = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+        checkForUpdates.target = self
+        menu.addItem(checkForUpdates)
 
         let quit = NSMenuItem(title: "Quit Ledge", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
@@ -180,6 +187,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func showDiagnostics() {
         onShowDiagnostics?()
+    }
+
+    @objc private func checkForUpdates() {
+        onCheckForUpdates?()
     }
 
     @objc private func quit() {

@@ -18,6 +18,13 @@ protocol TouchSource: AnyObject {
     var onTyping: ((Double) -> Void)? { get set }
     /// Input delivery was interrupted and any gesture in flight is no longer trustworthy.
     var onInterrupted: (() -> Void)? { get set }
+    /// Reports whether the required modifier key is currently held (true) or released (false).
+    var onModifierChanged: ((Bool) -> Void)? { get set }
+
+    /// Which modifier key the touch source should watch for. Set by `GestureController` from
+    /// preferences; the source checks this in `.flagsChanged` events to determine whether to
+    /// report the modifier as held or released.
+    var requiredModifierKey: ModifierKeyMode { get set }
 
     /// Whether a gesture currently owns a control. Written by `GestureController`; read only to
     /// decide whether to swallow pointer movement.
@@ -62,7 +69,9 @@ final class EventTapTouchSource: TouchSource {
     var onFrame: ((TouchFrame) -> Void)?
     var onTyping: ((Double) -> Void)?
     var onInterrupted: (() -> Void)?
+    var onModifierChanged: ((Bool) -> Void)?
 
+    var requiredModifierKey: ModifierKeyMode = .none
     var isGestureEngaged = false
     var cursorFreezeEnabled = true
     var savedCursorPosition: CGPoint?
@@ -219,6 +228,19 @@ final class EventTapTouchSource: TouchSource {
             // use a keyboard shortcut suppresses gestures the same way letters do.
             if let nsEvent = NSEvent(cgEvent: event) {
                 onTyping?(nsEvent.timestamp)
+                // When a modifier key requirement is active, report whether the required
+                // modifier is currently held. This feeds GestureEngine.setModifierHeld(_:).
+                if requiredModifierKey != .none {
+                    let flags = nsEvent.modifierFlags
+                    let held: Bool
+                    switch requiredModifierKey {
+                    case .none: held = false
+                    case .holdOption: held = flags.contains(.option)
+                    case .holdFn: held = flags.contains(.function)
+                    case .holdControl: held = flags.contains(.control)
+                    }
+                    onModifierChanged?(held)
+                }
             }
             return Unmanaged.passUnretained(event)
 

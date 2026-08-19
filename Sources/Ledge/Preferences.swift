@@ -32,6 +32,8 @@ final class Preferences {
         static let isEnabled = "isEnabled"
         static let useCoreAudioVolume = "useCoreAudioVolume"
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
+        static let modifierKeyRequired = "modifierKeyRequired"
+        static let excludedApps = "excludedApps"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -82,6 +84,7 @@ final class Preferences {
             settings.gestureTimeout = defaults.double(forKey: Key.gestureTimeout)
             settings.fineControl = defaults.bool(forKey: Key.fineControl)
             settings.swapSides = defaults.bool(forKey: Key.swapSides)
+            settings.modifierKeyRequired = modifierKeyRequired
             return settings
         }
         set {
@@ -94,6 +97,7 @@ final class Preferences {
             defaults.set(newValue.gestureTimeout, forKey: Key.gestureTimeout)
             defaults.set(newValue.fineControl, forKey: Key.fineControl)
             defaults.set(newValue.swapSides, forKey: Key.swapSides)
+            modifierKeyRequired = newValue.modifierKeyRequired
         }
     }
 
@@ -123,5 +127,26 @@ final class Preferences {
     var hasCompletedOnboarding: Bool {
         get { defaults.bool(forKey: Key.hasCompletedOnboarding) }
         set { defaults.set(newValue, forKey: Key.hasCompletedOnboarding) }
+    }
+
+    /// Which modifier key must be held for gestures to activate.
+    ///
+    /// Stored as the enum's raw value string. Defaults to `.none` (no modifier required).
+    var modifierKeyRequired: ModifierKeyMode {
+        get {
+            guard let raw = defaults.string(forKey: Key.modifierKeyRequired),
+                  let mode = ModifierKeyMode(rawValue: raw)
+            else { return .none }
+            return mode
+        }
+        set { defaults.set(newValue.rawValue, forKey: Key.modifierKeyRequired) }
+    }
+
+    /// Bundle identifiers of apps that should disable gesture detection when frontmost.
+    ///
+    /// Stored as a string array in UserDefaults. Defaults to empty (no apps excluded).
+    var excludedApps: [String] {
+        get { defaults.stringArray(forKey: Key.excludedApps) ?? [] }
+        set { defaults.set(newValue, forKey: Key.excludedApps) }
     }
 }
