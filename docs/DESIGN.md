@@ -201,8 +201,9 @@ spans the whole range.
 - External display brightness (DDC) -- the user has no external display
 - Mac App Store distribution -- impossible with private API, and not wanted
 - Configuration UI beyond a menu -- the entire premise is that it works without setup
-- Haptic feedback -- `NSHapticFeedbackManager` does not work for LSUIElement apps, and the
-  `MTActuator` private API was deemed not worth the maintenance cost
+- Haptic feedback -- explored and removed. Neither `NSHapticFeedbackManager` (does not work
+  for LSUIElement apps) nor `MTActuator` (private API) provided reliable results for an
+  accessory app. Feature was dropped by user decision
 
 ## Risks
 
