@@ -37,9 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if !preferences.hasCompletedOnboarding {
             // First launch: onboarding handles everything — permission explanation, granting,
-            // and auto-relaunch. Do NOT call Permissions.requestIfNeeded() here (that triggers
-            // the system prompt on top of the onboarding window) and do NOT show our own alert.
-            // The onboarding permission page polls AXIsProcessTrusted and guides the user.
+            // and auto-relaunch. Do NOT trigger the system Accessibility prompt here.
             let onboarding = OnboardingWindow(
                 preferences: preferences,
                 stepCountProvider: { [weak controller] in controller?.stepCount ?? 0 }
@@ -47,15 +45,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.onboardingWindow = onboarding
             onboarding.show()
 
-            // Still try to start — if permission was pre-granted (e.g. re-running onboarding
-            // after a defaults delete), the tap works and page 3 can detect gestures.
-            _ = controller.start()
+            // Only start the tap if permission is already granted (e.g. user re-running
+            // onboarding after a defaults delete with permission still intact). If not granted,
+            // do NOT call controller.start() — that triggers CGEvent.tapCreate which makes macOS
+            // show its own "Accessibility Access" system dialog on top of our onboarding window.
+            // The onboarding permission page polls and auto-relaunches once granted.
+            if Permissions.isTrusted() {
+                _ = controller.start()
+            } else {
+                startPollingForPermission()
+            }
         } else {
-            // Not first launch: prompt for permission if needed and start the tap.
-            Permissions.requestIfNeeded()
-            let startSucceeded = controller.start()
-
-            if !startSucceeded {
+            // Not first launch: if we have permission, start immediately.
+            // If not, show our own alert (do NOT call Permissions.requestIfNeeded — that
+            // triggers the system dialog which is redundant with our alert).
+            if Permissions.isTrusted() {
+                _ = controller.start()
+            } else {
                 presentPermissionAlert()
             }
         }
