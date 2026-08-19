@@ -22,6 +22,19 @@ permission, the onboarding will appear again automatically.
 
 ---
 
+## Features (Phase 2b)
+
+- **Modifier key requirement** -- optionally require holding Option, Fn, or Control before a
+  trackpad edge gesture activates. Eliminates accidental triggers during normal trackpad use.
+- **Per-app disable list** -- disable Ledge gestures in specific applications (e.g., drawing apps
+  or games that use the full trackpad surface).
+- **Auto-update via Sparkle** -- the app checks for updates on launch and can be triggered
+  manually from the menu. See [`docs/SPARKLE.md`](docs/SPARKLE.md) for setup details.
+- **Export/import settings** -- save all preferences as a JSON file for backup or sharing across
+  machines, and import them back from the Settings window.
+
+---
+
 ## How it works
 
 Two layers, split by what can be tested.
@@ -106,7 +119,7 @@ Other targets: `make build`, `make test`, `make reset-permission`, `make clean`.
 **Development (persistent Accessibility permission across rebuilds):**
 
 ```bash
-make cert           # one-time: create a self-signed "Ledge Dev" certificate (see docs/CERTIFICATE.md)
+make cert           # one-time: create an Apple Development certificate (free via Xcode, see docs/CERTIFICATE.md)
 make reinstall      # quit, rebuild, install to /Applications, and relaunch
 ```
 
@@ -140,8 +153,8 @@ its enabled checkbox in **Privacy & Security > Accessibility** while the grant d
 make reset-permission   # tccutil reset Accessibility xyz.tuyennedd.ledge
 ```
 
-Quit the app, run that, relaunch, grant again. To avoid this, sign with a stable self-signed
-certificate as described in `docs/CERTIFICATE.md`.
+Quit the app, run that, relaunch, grant again. To avoid this, sign with an Apple Development
+certificate (free via Xcode) as described in [`docs/CERTIFICATE.md`](docs/CERTIFICATE.md).
 
 ---
 
@@ -150,12 +163,19 @@ certificate as described in `docs/CERTIFICATE.md`.
 The menu bar icon provides:
 
 - **Enabled** -- master toggle
+- **Swap Sides** -- flip volume/brightness edges
+- **Fine Control** -- smaller step size per gesture increment
+- **Bottom Quarter Only** -- restrict activation to the bottom quarter of the trackpad
+- **Freeze Cursor** -- hold the pointer still during a gesture
+- **Continuous Volume** -- use CoreAudio backend for stepless volume (no HUD)
+- **Launch at Login** -- start Ledge automatically on login
+- ---
 - **Settings...** (⌘,) -- opens the Settings window for all preferences
+- **Check for Updates...** -- manually check for a newer version via Sparkle
 - **Diagnostics...** -- live readout of touch data, engine state, volume, brightness
 - **Quit Ledge**
 
-All toggles (Swap Sides, Fine Control, Bottom Quarter Only, Freeze Cursor, Launch at Login)
-have moved to the Settings window.
+Toggles are available in both the menu bar and the Settings window.
 
 ---
 
@@ -194,7 +214,7 @@ itself.
 - **The Accessibility grant does not survive a rebuild with ad-hoc signing.** If you skip the
   certificate setup (see "For developers" above), the app looks enabled in Privacy & Security
   while the grant has no effect. Use `make reset-permission` after each build, or set up the
-  self-signed certificate to avoid this entirely.
+  Apple Development certificate to avoid this entirely.
 - **The event tap subscribes to every event type**, because per-type subscription is reported not
   to be honoured for gesture events. That means the tap callback runs for every event in the
   session. It does nothing but count and return for types it ignores, but if the tap starts being
@@ -206,6 +226,9 @@ itself.
   window prints raw ids.
 - **The CoreAudio backend clears mute on the way up only.** Sliding down on a muted device leaves
   it muted, deliberately. The media-key backend gets mute handling from the OS.
+- **Sparkle auto-update requires additional setup to be fully functional.** The update mechanism
+  needs GitHub Pages hosting for the appcast feed and Ed25519 signing keys. See
+  [`docs/SPARKLE.md`](docs/SPARKLE.md) for the complete setup procedure.
 
 ---
 
