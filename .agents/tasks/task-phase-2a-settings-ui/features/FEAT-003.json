@@ -1,0 +1,30 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Settings window (SwiftUI via NSHostingController, 3 tabs: Gesture, Behavior, About) with trackpad preview, and menu bar 'Settings...' item",
+  "status": "completed",
+  "steps": [
+    "Create Sources/Ledge/SettingsWindow.swift - NSWindow subclass or factory that creates a titled, closable, non-resizable window (~500x400) hosting an NSHostingController with SettingsView as root. Pattern similar to DiagnosticsWindow.swift but using NSHostingController. Window is isReleasedWhenClosed = false so it can be reopened. Include a show() method.",
+    "Create Sources/Ledge/SettingsView.swift - Root SwiftUI view with TabView(.automatic style) containing 3 tabs: GestureSettingsTab, BehaviorSettingsTab, AboutTab. Uses an @Observable SettingsViewModel class that reads/writes Preferences and calls a closure to trigger applyPreferences().",
+    "Create Sources/Ledge/GestureSettingsTab.swift - Gesture tab containing: TrackpadPreviewView at top, edge width slider (range 0.01-0.10, step 0.005, displays fraction and approximate mm), activation distance slider, fine control toggle, swap sides toggle. All bound to the SettingsViewModel.",
+    "Create Sources/Ledge/TrackpadPreviewView.swift - SwiftUI View showing a 3:2 aspect ratio rounded rectangle representing the trackpad with left/right edge bands as semi-transparent blue overlays. Width updates live from slider. Shows numeric mm labels. Labels 'Brightness' on left, 'Volume' on right (swap when swapSides is on). Subtle border for trackpad texture.",
+    "Create Sources/Ledge/BehaviorSettingsTab.swift - Behavior tab with: enabled toggle, cursor freeze toggle, continuous volume (no HUD) toggle, typing lockout slider (0.2-2.0s), bottom quarter only toggle, gesture timeout slider, launch at login toggle.",
+    "Create Sources/Ledge/AboutTab.swift - About tab with: app icon (NSApp icon), version string from Bundle.main, description 'Ledge - trackpad edge gestures for volume & brightness', link to GitHub repo.",
+    "Modify Sources/Ledge/MenuBarController.swift - Add 'Settings...' menu item with keyEquivalent ',' (Cmd+,) before the Diagnostics item. Add an `onShowSettings: (() -> Void)?` callback similar to onShowDiagnostics.",
+    "Modify Sources/Ledge/AppDelegate.swift - Create and own a SettingsWindow instance. Wire menuBar.onShowSettings to show the settings window. Pass a reference/closure so SettingsWindow can call controller.applyPreferences() when settings change."
+  ],
+  "acceptance_criteria": [
+    "6 new Swift files exist in Sources/Ledge/ (SettingsWindow, SettingsView, GestureSettingsTab, TrackpadPreviewView, BehaviorSettingsTab, AboutTab)",
+    "MenuBarController has 'Settings...' item with Cmd+, shortcut",
+    "AppDelegate owns and shows the SettingsWindow",
+    "SettingsViewModel uses @Observable macro (macOS 14+)",
+    "Changes apply immediately via applyPreferences() closure",
+    "All SwiftUI code has // UNVERIFIED: comments on uncertain API usage",
+    "Running `swift test` still passes all 54 tests (changes are macOS-only)"
+  ],
+  "verification": [
+    "Run `swift test` and confirm all 54 tests pass"
+  ],
+  "blocked_reason": null,
+  "findings": "All 54 LedgeCore tests pass. 6 new SwiftUI files created, 2 existing files modified. All SwiftUI code marked with // UNVERIFIED: comments as required (NSHostingController, @Observable, Form/Slider/Toggle usage, GeometryReader). Settings window follows DiagnosticsWindow pattern with isReleasedWhenClosed=false and show() method."
+}

@@ -41,7 +41,7 @@ BIN_DIR = $(shell swift build -c $(CONFIG) --show-bin-path)
 
 BUNDLE_ID := xyz.tuyennedd.ledge
 
-.PHONY: all build app dmg install reinstall run test reset-permission clean
+.PHONY: all build app dmg install reinstall run test cert reset-permission clean
 
 all: app
 
@@ -127,6 +127,18 @@ run: app
 ##
 ## Run this whenever the app claims it has no permission while the settings pane shows it enabled.
 ## Quit the app first; then relaunch and grant when prompted.
+## Create a self-signed code signing certificate named "Ledge Dev" in the login keychain.
+## Only needs to be run once per machine. If the certificate already exists, does nothing.
+## This replaces the old Keychain Access GUI workflow and works on any macOS version.
+cert:
+	@if security find-identity -v -p codesigning 2>/dev/null | grep -q "Ledge Dev"; then \
+		echo "Certificate 'Ledge Dev' already exists."; \
+	else \
+		echo "Creating self-signed code signing certificate 'Ledge Dev'..."; \
+		security create-identity -s "Ledge Dev" -t codeSign -p codesigning login.keychain-db; \
+		echo "Done. Verify with: security find-identity -v -p codesigning"; \
+	fi
+
 reset-permission:
 	tccutil reset Accessibility $(BUNDLE_ID)
 	@echo "Reset Accessibility for $(BUNDLE_ID) — relaunch the app and grant again."
