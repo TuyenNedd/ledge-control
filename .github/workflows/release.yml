@@ -90,6 +90,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # Save appcast to temp location before switching branches
+          cp appcast.xml /tmp/appcast.xml
+
           # Fetch gh-pages if it exists, otherwise create an orphan branch
           if git ls-remote --exit-code origin gh-pages >/dev/null 2>&1; then
             git fetch origin gh-pages
@@ -99,8 +102,8 @@ jobs:
             git rm -rf . || true
           fi
 
-          # Copy the generated appcast into the branch root
-          cp "${{ github.workspace }}/appcast.xml" appcast.xml
+          # Copy from temp into the branch root
+          cp /tmp/appcast.xml appcast.xml
 
           git add appcast.xml
           git commit -m "Update appcast.xml for v${{ steps.version.outputs.version }}" || echo "No changes to commit"
