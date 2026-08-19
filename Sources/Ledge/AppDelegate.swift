@@ -35,28 +35,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onShowSettings = { settingsWindow.show() }
         self.menuBar = menuBar
 
-        // Prompts if needed. Granting does not take effect until relaunch, so the alert below is
-        // still the right response to a failed start even when the user says yes immediately.
-        Permissions.requestIfNeeded()
-
-        // Start the event tap before showing onboarding, so that the "Try It" page can actually
-        // detect gestures. If start() fails (permission denied), the onboarding page 3 step
-        // counter will remain at zero but the permission page guides the user correctly.
-        let startSucceeded = controller.start()
-
-        // Show the onboarding flow on first launch. The onboarding window polls AXIsProcessTrusted
-        // itself and provides step-count feedback by reading from the controller.
         if !preferences.hasCompletedOnboarding {
+            // First launch: onboarding handles everything — permission explanation, granting,
+            // and auto-relaunch. Do NOT call Permissions.requestIfNeeded() here (that triggers
+            // the system prompt on top of the onboarding window) and do NOT show our own alert.
+            // The onboarding permission page polls AXIsProcessTrusted and guides the user.
             let onboarding = OnboardingWindow(
                 preferences: preferences,
                 stepCountProvider: { [weak controller] in controller?.stepCount ?? 0 }
             )
             self.onboardingWindow = onboarding
             onboarding.show()
-        }
 
-        if !startSucceeded {
-            presentPermissionAlert(diagnostics: diagnostics)
+            // Still try to start — if permission was pre-granted (e.g. re-running onboarding
+            // after a defaults delete), the tap works and page 3 can detect gestures.
+            _ = controller.start()
+        } else {
+            // Not first launch: prompt for permission if needed and start the tap.
+            Permissions.requestIfNeeded()
+            let startSucceeded = controller.start()
+
+            if !startSucceeded {
+                presentPermissionAlert()
+            }
         }
     }
 
@@ -69,7 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Offers to open System Settings, and once permission is granted the app relaunches itself
     /// automatically. Also offers a manual "Relaunch Now" button for users who grant permission
     /// in their own time.
-    private func presentPermissionAlert(diagnostics: DiagnosticsWindow) {
+    private func presentPermissionAlert() {
         let alert = NSAlert()
         alert.messageText = "Ledge needs Accessibility permission."
         alert.informativeText = """
