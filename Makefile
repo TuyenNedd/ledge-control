@@ -53,11 +53,16 @@ build:
 ## Assemble dist/Ledge.app and sign it ad-hoc.
 app: build
 	rm -rf "$(BUNDLE)"
-	mkdir -p "$(CONTENTS)/MacOS" "$(CONTENTS)/Resources"
+	mkdir -p "$(CONTENTS)/MacOS" "$(CONTENTS)/Resources" "$(CONTENTS)/Frameworks"
 	cp Resources/Info.plist "$(CONTENTS)/Info.plist"
 	printf 'APPL????' > "$(CONTENTS)/PkgInfo"
 	cp "$(BIN_DIR)/$(APP_NAME)" "$(CONTENTS)/MacOS/$(APP_NAME)"
-	codesign --force --sign "$(SIGNING_IDENTITY)" "$(BUNDLE)"
+	@# Copy Sparkle.framework into the bundle so the dynamic linker can find it at @rpath
+	@SPARKLE_PATH=$$(find .build -path "*/artifacts/Sparkle/Sparkle.framework" -type d 2>/dev/null | head -1); \
+	if [ -n "$$SPARKLE_PATH" ]; then \
+		cp -R "$$SPARKLE_PATH" "$(CONTENTS)/Frameworks/Sparkle.framework"; \
+	fi
+	codesign --force --deep --sign "$(SIGNING_IDENTITY)" "$(BUNDLE)"
 	@echo "Built $(BUNDLE) — verify with: codesign -dv $(BUNDLE)"
 	@echo "# Ad-hoc: make app SIGNING_IDENTITY=\"-\""
 
