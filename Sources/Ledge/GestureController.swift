@@ -61,6 +61,7 @@ final class GestureController {
         touchSource.onFrame = { [weak self] frame in self?.receive(frame) }
         touchSource.onTyping = { [weak self] timestamp in self?.receiveTyping(at: timestamp) }
         touchSource.onInterrupted = { [weak self] in self?.interrupt() }
+        touchSource.onModifierChanged = { [weak self] held in self?.receiveModifierChanged(held) }
         applyPreferences()
         return touchSource.start()
     }
@@ -77,6 +78,7 @@ final class GestureController {
     func applyPreferences() {
         engine.settings = preferences.gestureSettings
         touchSource.cursorFreezeEnabled = preferences.cursorFreezeEnabled
+        touchSource.requiredModifierKey = preferences.modifierKeyRequired
         // Forwarded because switching off ends a gesture in flight, and that has to reach the
         // haptics and the cursor-freeze flag. Switching on returns nothing, so re-asserting the
         // current state is harmless.
@@ -91,6 +93,10 @@ final class GestureController {
 
     private func receiveTyping(at timestamp: Double) {
         apply(engine.noteTyping(at: timestamp))
+    }
+
+    private func receiveModifierChanged(_ held: Bool) {
+        apply(engine.setModifierHeld(held))
     }
 
     /// The world changed underneath us — the tap was disabled and re-enabled, so frames were

@@ -1,5 +1,6 @@
 import SwiftUI
 import ServiceManagement
+import LedgeCore
 
 /// The root SwiftUI view for the Settings window, using a sidebar with grouped sections.
 struct SettingsView: View {
@@ -145,6 +146,10 @@ final class SettingsViewModel {
         didSet { preferences.useCoreAudioVolume = useCoreAudioVolume; applyPreferencesClosure() }
     }
 
+    var modifierKeyRequired: ModifierKeyMode {
+        didSet { preferences.modifierKeyRequired = modifierKeyRequired; applyPreferencesClosure() }
+    }
+
     var typingLockout: Double {
         didSet { writeGestureSettings(); applyIfNotEditing() }
     }
@@ -173,6 +178,7 @@ final class SettingsViewModel {
         self.isEnabled = preferences.isEnabled
         self.cursorFreezeEnabled = preferences.cursorFreezeEnabled
         self.useCoreAudioVolume = preferences.useCoreAudioVolume
+        self.modifierKeyRequired = preferences.modifierKeyRequired
 
         // UNVERIFIED: SMAppService.mainApp.status == .enabled for reading login item state.
         self.launchAtLogin = SMAppService.mainApp.status == .enabled

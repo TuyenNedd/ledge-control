@@ -93,6 +93,13 @@ public struct GestureSettings: Sendable, Equatable {
     /// brightness on the left. Left-handed users, or anyone who disagrees, flip this.
     public var swapSides: Bool = false
 
+    /// Which modifier key must be held for gestures to activate.
+    ///
+    /// Default `.none` means no modifier is required and gestures work unconditionally. Any other
+    /// value makes the engine suppress arming (the same way the typing lockout does) unless the
+    /// adapter reports the modifier as currently held. Releasing the modifier mid-gesture ends it.
+    public var modifierKeyRequired: ModifierKeyMode = .none
+
     public init() {}
 
     /// Which edge, if any, a horizontal position falls in.
