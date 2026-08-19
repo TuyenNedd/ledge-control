@@ -17,11 +17,19 @@ var targets: [Target] = [
     ),
 ]
 
+var dependencies: [Package.Dependency] = []
+
 #if os(macOS)
+dependencies.append(
+    .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.0.0")
+)
 targets.append(
     .executableTarget(
         name: "Ledge",
-        dependencies: ["LedgeCore"],
+        dependencies: [
+            "LedgeCore",
+            .product(name: "Sparkle", package: "Sparkle"),
+        ],
         // The AppKit layer is single-threaded, main-thread-bound, and full of imported
         // types that predate Sendable. Swift 6 strict concurrency adds nothing here but
         // noise, so this target stays in language mode 5.
@@ -33,5 +41,6 @@ targets.append(
 let package = Package(
     name: "Ledge",
     platforms: [.macOS(.v14)],
+    dependencies: dependencies,
     targets: targets
 )
