@@ -7,9 +7,10 @@ import SwiftUI
 /// Pages:
 /// 1. **Permission** - App icon, welcome text, explains Accessibility requirement, button to
 ///    open System Settings, live "Waiting for permission..." / "Permission granted" status.
-///    Combines the old Welcome and Permission pages into one — the user sees what the app does
+///    Combines the old Welcome and Permission pages into one -- the user sees what the app does
 ///    and what it needs at the same time.
-/// 2. **Try It** - Trackpad preview with live step count feedback from the gesture controller.
+/// 2. **Try It** - Interactive trackpad preview with live finger tracking, volume/brightness
+///    bars, animated arrow hint, and step counter celebration.
 ///
 /// "Continue" on page 1 advances to page 2 (enabled even without permission, but shows a note).
 /// "Get Started" on page 2 marks onboarding complete and closes the window.
@@ -17,12 +18,35 @@ import SwiftUI
 struct OnboardingView: View {
     let preferences: Preferences
     let stepCountProvider: () -> Int
+    let touchPositionProvider: () -> (x: Double, y: Double)?
+    let isEngagedProvider: () -> Bool
+    let volumeProvider: () -> Float?
+    let brightnessProvider: () -> Float?
     let coordinator: OnboardingCoordinator
 
     @State private var currentPage = 0
     @State private var isAccessibilityGranted = false
     @State private var stepCount = 0
     @State private var accessibilityCheckEnabled = false
+
+    // Live tracking state
+    @State private var fingerPosition: CGPoint?
+    @State private var isEngaged = false
+    @State private var volumeLevel: Float = 0
+    @State private var brightnessLevel: Float = 0
+
+    // Animation state
+    @State private var arrowOffset: CGFloat = -10
+    @State private var arrowVisible = true
+    @State private var stepCelebrated = false
+    @State private var stepCountScale: CGFloat = 1.0
+    @State private var celebrationScale: CGFloat = 1.0
+    @State private var getStartedScale: CGFloat = 1.0
+    @State private var previousStepCount = 0
+    @State private var volumeBounce: CGFloat = 1.0
+    @State private var brightnessBounce: CGFloat = 1.0
+    @State private var previousVolume: Float = 0
+    @State private var previousBrightness: Float = 0
 
     /// Timer publishers that SwiftUI manages automatically (cancelled when the view leaves the
     /// hierarchy). Accessibility poll starts only after `accessibilityCheckEnabled` is set.
@@ -139,36 +163,57 @@ struct OnboardingView: View {
     // MARK: - Page 2: Try It
 
     private var tryItPage: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 12) {
             Spacer()
 
             Text("Try It")
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            TrackpadPreviewView(
-                edgeBandWidth: .constant(preferences.gestureSettings.edgeBandWidth),
-                swapSides: preferences.gestureSettings.swapSides
-            )
-            .frame(height: 140)
+            // Trackpad preview with live finger indicator and arrow hint
+            ZStack(alignment: .trailing) {
+                TrackpadPreviewView(
+                    edgeBandWidth: .constant(preferences.gestureSettings.edgeBandWidth),
+                    swapSides: preferences.gestureSettings.swapSides,
+                    fingerPosition: fingerPosition,
+                    isEngaged: isEngaged
+                )
+                .frame(height: 140)
+
+                // Animated arrow hint (visible only when no steps detected yet)
+                // UNVERIFIED: SF Symbol "arrow.up.and.down" with repeating offset animation on macOS 14+.
+                if stepCount == 0 && arrowVisible {
+                    Image(systemName: "arrow.up.and.down")
+                        .font(.title2)
+                        .foregroundStyle(.blue.opacity(0.7))
+                        .offset(y: arrowOffset)
+                        .padding(.trailing, 8)
+                        .onAppear {
+                            withAnimation(
+                                .easeInOut(duration: 1.0)
+                                .repeatForever(autoreverses: true)
+                            ) {
+                                arrowOffset = 10
+                            }
+                        }
+                }
+            }
             .padding(.horizontal, 40)
 
             Text("Slide along the right edge now")
                 .font(.body)
                 .foregroundStyle(.secondary)
 
-            // Live step count feedback
-            HStack(spacing: 8) {
-                Image(systemName: "hand.draw")
-                    .font(.title3)
-                Text(stepCount == 0 ? "Waiting for gestures..." : "Steps detected: \(stepCount)")
-                    .font(.body)
-                    .foregroundStyle(stepCount > 0 ? .primary : .secondary)
-            }
-            .padding(.top, 4)
+            // Volume/Brightness bars
+            controlBars
+                .padding(.horizontal, 60)
+
+            // Live step count feedback with celebration
+            stepCountView
+                .padding(.top, 4)
 
             if !isAccessibilityGranted {
-                Text("Permission not yet granted — gestures won't work until you allow Accessibility access.")
+                Text("Permission not yet granted -- gestures won't work until you allow Accessibility access.")
                     .font(.caption)
                     .foregroundStyle(.orange)
                     .multilineTextAlignment(.center)
@@ -178,12 +223,158 @@ struct OnboardingView: View {
             Spacer()
         }
         .onReceive(stepTimer) { _ in
-            stepCount = stepCountProvider()
+            let newStepCount = stepCountProvider()
+
+            // Detect step count changes for animations
+            if newStepCount != previousStepCount && newStepCount > 0 {
+                // Step count pop animation
+                withAnimation(.spring(response: 0.2, dampingFraction: 0.5)) {
+                    stepCountScale = 1.2
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                        stepCountScale = 1.0
+                    }
+                }
+
+                // Fade out arrow on first step
+                if previousStepCount == 0 {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        arrowVisible = false
+                    }
+                }
+
+                // Celebration at 5 steps
+                if newStepCount >= 5 && !stepCelebrated {
+                    stepCelebrated = true
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                        celebrationScale = 1.1
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                            celebrationScale = 1.0
+                        }
+                    }
+                    // Pulse the Get Started button
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                        getStartedScale = 1.08
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                        withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+                            getStartedScale = 1.0
+                        }
+                    }
+                }
+
+                previousStepCount = newStepCount
+            }
+            stepCount = newStepCount
+
+            // Update finger position
+            if let pos = touchPositionProvider() {
+                fingerPosition = CGPoint(x: pos.x, y: pos.y)
+            } else {
+                fingerPosition = nil
+            }
+
+            // Update engaged state
+            isEngaged = isEngagedProvider()
+
+            // Update volume/brightness with bounce animation on change
+            let newVolume = volumeProvider() ?? 0
+            let newBrightness = brightnessProvider() ?? 0
+
+            if abs(newVolume - previousVolume) > 0.01 && stepCount > previousStepCount - 1 {
+                withAnimation(.spring(response: 0.1, dampingFraction: 0.5)) {
+                    volumeBounce = 1.05
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    withAnimation(.spring(response: 0.1, dampingFraction: 0.7)) {
+                        volumeBounce = 1.0
+                    }
+                }
+            }
+            if abs(newBrightness - previousBrightness) > 0.01 && stepCount > previousStepCount - 1 {
+                withAnimation(.spring(response: 0.1, dampingFraction: 0.5)) {
+                    brightnessBounce = 1.05
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    withAnimation(.spring(response: 0.1, dampingFraction: 0.7)) {
+                        brightnessBounce = 1.0
+                    }
+                }
+            }
+
+            previousVolume = newVolume
+            previousBrightness = newBrightness
+            volumeLevel = newVolume
+            brightnessLevel = newBrightness
         }
         .onReceive(accessibilityTimer) { _ in
             guard accessibilityCheckEnabled else { return }
             isAccessibilityGranted = Permissions.isTrusted()
         }
+    }
+
+    // MARK: - Control Bars (Volume & Brightness)
+
+    // UNVERIFIED: ProgressView linear style with scaleEffect animation on macOS 14+.
+    private var controlBars: some View {
+        HStack(spacing: 16) {
+            // Brightness bar
+            HStack(spacing: 6) {
+                Image(systemName: "sun.max.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 14)
+                ProgressView(value: Double(brightnessLevel), total: 1.0)
+                    .progressViewStyle(.linear)
+                    .frame(maxWidth: .infinity)
+            }
+            .scaleEffect(brightnessBounce)
+
+            // Volume bar
+            HStack(spacing: 6) {
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 14)
+                ProgressView(value: Double(volumeLevel), total: 1.0)
+                    .progressViewStyle(.linear)
+                    .frame(maxWidth: .infinity)
+            }
+            .scaleEffect(volumeBounce)
+        }
+    }
+
+    // MARK: - Step Count View
+
+    private var stepCountView: some View {
+        HStack(spacing: 8) {
+            if stepCelebrated {
+                // Celebration state
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(.green)
+                Text("It works! You're ready to go.")
+                    .font(.body)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.green)
+            } else {
+                Image(systemName: "hand.draw")
+                    .font(.title3)
+                if stepCount == 0 {
+                    Text("Waiting for gestures...")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("Steps detected: \(stepCount)")
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                }
+            }
+        }
+        .scaleEffect(stepCelebrated ? celebrationScale : stepCountScale)
     }
 
     // MARK: - Navigation
@@ -209,6 +400,7 @@ struct OnboardingView: View {
                     coordinator.close()
                 }
                 .buttonStyle(.borderedProminent)
+                .scaleEffect(getStartedScale)
             }
         }
     }

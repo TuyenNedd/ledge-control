@@ -15,12 +15,27 @@ final class OnboardingWindow: NSObject, NSWindowDelegate {
     /// - Parameters:
     ///   - preferences: Shared preferences instance (for setting `hasCompletedOnboarding`).
     ///   - stepCountProvider: Closure that returns the current step count from the gesture controller.
-    init(preferences: Preferences, stepCountProvider: @escaping () -> Int) {
+    ///   - touchPositionProvider: Closure that returns the current finger position (x, y) in 0...1 normalized space, or nil if no touch.
+    ///   - isEngagedProvider: Closure that returns whether a gesture is currently engaged.
+    ///   - volumeProvider: Closure that returns the current volume scalar (0...1), or nil if unavailable.
+    ///   - brightnessProvider: Closure that returns the current brightness scalar (0...1), or nil if unavailable.
+    init(
+        preferences: Preferences,
+        stepCountProvider: @escaping () -> Int,
+        touchPositionProvider: @escaping () -> (x: Double, y: Double)? = { nil },
+        isEngagedProvider: @escaping () -> Bool = { false },
+        volumeProvider: @escaping () -> Float? = { nil },
+        brightnessProvider: @escaping () -> Float? = { nil }
+    ) {
         // UNVERIFIED: NSHostingController with SwiftUI view as root content for macOS 14+.
         let coordinator = OnboardingCoordinator()
         let onboardingView = OnboardingView(
             preferences: preferences,
             stepCountProvider: stepCountProvider,
+            touchPositionProvider: touchPositionProvider,
+            isEngagedProvider: isEngagedProvider,
+            volumeProvider: volumeProvider,
+            brightnessProvider: brightnessProvider,
             coordinator: coordinator
         )
         let hostingController = NSHostingController(rootView: onboardingView)

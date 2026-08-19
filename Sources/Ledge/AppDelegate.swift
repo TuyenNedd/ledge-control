@@ -44,7 +44,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Settings" button and polls only AFTER a 3-second delay to let its window appear first.
             let onboarding = OnboardingWindow(
                 preferences: preferences,
-                stepCountProvider: { [weak controller] in controller?.stepCount ?? 0 }
+                stepCountProvider: { [weak controller] in controller?.stepCount ?? 0 },
+                touchPositionProvider: { [weak controller] in
+                    guard let pos = controller?.lastFrame?.touches.first?.position else { return nil }
+                    return (x: pos.x, y: pos.y)
+                },
+                isEngagedProvider: { [weak controller] in controller?.engagedControl != nil },
+                volumeProvider: { [weak controller] in controller?.currentVolumeScalar() },
+                brightnessProvider: { [weak controller] in controller?.currentBrightness() }
             )
             self.onboardingWindow = onboarding
             onboarding.show()
