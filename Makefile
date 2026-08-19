@@ -41,7 +41,7 @@ BIN_DIR = $(shell swift build -c $(CONFIG) --show-bin-path)
 
 BUNDLE_ID := xyz.tuyennedd.ledge
 
-.PHONY: all build app install reinstall run test reset-permission clean
+.PHONY: all build app dmg install reinstall run test reset-permission clean
 
 all: app
 
@@ -60,6 +60,43 @@ app: build
 	codesign --force --sign "$(SIGNING_IDENTITY)" "$(BUNDLE)"
 	@echo "Built $(BUNDLE) — verify with: codesign -dv $(BUNDLE)"
 	@echo "# Ad-hoc: make app SIGNING_IDENTITY=\"-\""
+
+## Create a distributable .dmg disk image with ad-hoc signing (no developer certificate needed).
+## The version is extracted from Resources/Info.plist CFBundleShortVersionString.
+dmg:
+	$(MAKE) app SIGNING_IDENTITY="-"
+	$(eval VERSION := $(shell /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Resources/Info.plist))
+	rm -rf dist/dmg-staging
+	mkdir -p dist/dmg-staging
+	cp -R "$(BUNDLE)" dist/dmg-staging/
+	ln -s /Applications dist/dmg-staging/Applications
+	@printf '%s\n' \
+		"Ledge — First Run Guide" \
+		"" \
+		"1. Drag Ledge.app to the Applications folder (shortcut is right here)" \
+		"" \
+		"2. If macOS says \"cannot be opened because the developer cannot be verified\":" \
+		"   → Right-click (or Control-click) Ledge.app" \
+		"   → Click \"Open\" from the menu" \
+		"   → Click \"Open\" in the dialog" \
+		"   (You only need to do this once)" \
+		"" \
+		"3. Grant Accessibility permission when asked, then relaunch the app" \
+		"" \
+		"4. Slide along the right edge of your trackpad — volume should change!" \
+		"" \
+		"Tips:" \
+		"- Settings: click the menu bar icon → Settings... (or ⌘,)" \
+		"- Left edge = brightness, right edge = volume" \
+		"- The gesture zone is very close to the physical edge (~4mm)" \
+		> dist/dmg-staging/FIRST-RUN.txt
+	rm -f "dist/$(APP_NAME)-$(VERSION).dmg"
+	hdiutil create -volname "$(APP_NAME)" \
+		-srcfolder dist/dmg-staging \
+		-ov -format UDZO \
+		"dist/$(APP_NAME)-$(VERSION).dmg"
+	rm -rf dist/dmg-staging
+	@echo "Created dist/$(APP_NAME)-$(VERSION).dmg"
 
 ## Replace the copy in /Applications. Launch-at-login via SMAppService expects the app to live
 ## somewhere the system can find it, so install before testing that menu item.
