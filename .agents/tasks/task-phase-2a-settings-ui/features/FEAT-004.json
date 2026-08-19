@@ -1,0 +1,27 @@
+{
+  "id": "FEAT-004",
+  "type": "feat",
+  "description": "Onboarding window (3 pages: Welcome, Permission, Try it) shown on first launch",
+  "status": "completed",
+  "steps": [
+    "Modify Sources/Ledge/Preferences.swift - Add hasCompletedOnboarding Bool property backed by UserDefaults key 'hasCompletedOnboarding' (defaults to false, no need to register since bool returns false by default which is what we want for first launch).",
+    "Create Sources/Ledge/OnboardingWindow.swift - NSWindow (titled, closable, not resizable, ~550x450) with NSHostingController hosting OnboardingView. Has show() method. isReleasedWhenClosed = false.",
+    "Create Sources/Ledge/OnboardingView.swift - SwiftUI view with 3 pages navigated by Next/Back buttons: (1) WelcomePage - app icon, 'Welcome to Ledge', one-sentence description. (2) PermissionPage - explains Accessibility needed, button to open System Settings (using the same URL scheme from AppDelegate), live poll of AXIsProcessTrusted() with checkmark when granted. (3) TryItPage - shows TrackpadPreviewView, instruction text 'Slide along the right edge now', live step count feedback (bind to a step counter that observes GestureController.stepCount or similar). After completing page 3: sets hasCompletedOnboarding = true and closes.",
+    "Modify Sources/Ledge/AppDelegate.swift - After building controller/menuBar, check if !preferences.hasCompletedOnboarding. If so, show onboarding window. Own the OnboardingWindow instance. Pass needed references for AX polling and step detection."
+  ],
+  "acceptance_criteria": [
+    "Preferences has hasCompletedOnboarding property",
+    "OnboardingWindow.swift and OnboardingView.swift exist",
+    "Onboarding has 3 navigable pages with Next/Back",
+    "Page 2 polls AXIsProcessTrusted with live UI update",
+    "Page 3 shows trackpad preview and live step detection feedback",
+    "AppDelegate shows onboarding on first launch only",
+    "All uncertain SwiftUI usage marked with // UNVERIFIED:",
+    "Running `swift test` still passes all 54 tests"
+  ],
+  "verification": [
+    "Run `swift test` and confirm all 54 tests pass"
+  ],
+  "blocked_reason": null,
+  "findings": "All 54 LedgeCore tests pass. Created OnboardingWindow.swift (following SettingsWindow/DiagnosticsWindow pattern with NSHostingController) and OnboardingView.swift (3-page SwiftUI view with Timer-based polling). Modified Preferences.swift to add hasCompletedOnboarding property (no default registration needed). Modified AppDelegate.swift to show onboarding on first launch with step count provider closure. All uncertain SwiftUI usage marked with // UNVERIFIED: comments."
+}

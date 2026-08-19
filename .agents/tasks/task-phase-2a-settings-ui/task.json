@@ -1,0 +1,14 @@
+{
+  "task_id": "task-phase-2a-settings-ui",
+  "task_description": "Implement Phase 2a of Ledge: Settings UI, Onboarding, and Build Workflow improvements. Includes self-signed cert guide, make reinstall, Settings window with 3 tabs and trackpad preview, onboarding flow, and menu bar icon highlight during gesture.",
+  "status": "completed",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003", "FEAT-004", "FEAT-005"],
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "pass",
+    "docker_build": "skipped",
+    "summary": "All 54 LedgeCore tests pass. Ledge target is macOS-only and cannot be compiled on Linux. Code reviewed via semantic review (v1 found 5 issues, 4 fixed in c7b2ea5, v2 APPROVED)."
+  }
+}

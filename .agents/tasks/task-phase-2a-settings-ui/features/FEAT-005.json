@@ -1,0 +1,21 @@
+{
+  "id": "FEAT-005",
+  "type": "feat",
+  "description": "Menu bar icon highlight when gesture is engaged",
+  "status": "completed",
+  "steps": [
+    "Modify Sources/Ledge/GestureController.swift - Add a callback property: var onEngagementChanged: ((Bool) -> Void)? and call it from apply(_:) when engagedControl transitions between nil and non-nil (on .engaged set to true, on .disengaged set to false).",
+    "Modify Sources/Ledge/MenuBarController.swift - Subscribe to controller.onEngagementChanged in init. When engaged (true): set statusItem.button?.contentTintColor to .controlAccentColor (or a suitable highlight color). When disengaged (false): set contentTintColor back to nil (restoring template appearance). This is called from the main thread (the event tap callback runs on the main run loop) so UI update is safe."
+  ],
+  "acceptance_criteria": [
+    "GestureController has onEngagementChanged callback",
+    "The callback fires true on .engaged and false on .disengaged",
+    "MenuBarController subscribes and changes contentTintColor accordingly",
+    "Running `swift test` still passes all 54 tests"
+  ],
+  "verification": [
+    "Run `swift test` and confirm all 54 tests pass"
+  ],
+  "blocked_reason": null,
+  "findings": "All 54 tests pass. Implementation straightforward - added onEngagementChanged callback to GestureController and subscribed in MenuBarController init to toggle contentTintColor."
+}
