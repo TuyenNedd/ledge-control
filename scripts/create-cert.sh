@@ -40,6 +40,15 @@ openssl req -x509 -newkey rsa:2048 \
     -config "$TMPDIR/cert.conf" 2>/dev/null
 
 # Package as PKCS12 for keychain import
+# -legacy is required on newer OpenSSL/LibreSSL (macOS 14+) because the default
+# encryption algorithm changed and security import doesn't understand the new one.
+# Try with -legacy first; fall back without it for older OpenSSL that doesn't know the flag.
+openssl pkcs12 -export \
+    -out "$TMPDIR/cert.p12" \
+    -inkey "$TMPDIR/key.pem" \
+    -in "$TMPDIR/cert.pem" \
+    -passout pass:ledgedev \
+    -legacy 2>/dev/null || \
 openssl pkcs12 -export \
     -out "$TMPDIR/cert.p12" \
     -inkey "$TMPDIR/key.pem" \
