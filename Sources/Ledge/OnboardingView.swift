@@ -43,15 +43,13 @@ struct OnboardingView: View {
     @State private var celebrationScale: CGFloat = 1.0
     @State private var getStartedScale: CGFloat = 1.0
     @State private var previousStepCount = 0
-    @State private var volumeBounce: CGFloat = 1.0
-    @State private var brightnessBounce: CGFloat = 1.0
     @State private var previousVolume: Float = 0
     @State private var previousBrightness: Float = 0
 
     /// Timer publishers that SwiftUI manages automatically (cancelled when the view leaves the
     /// hierarchy). Accessibility poll starts only after `accessibilityCheckEnabled` is set.
     private let accessibilityTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
-    private let stepTimer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
+    private let stepTimer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
     private let totalPages = 2
 
@@ -280,30 +278,9 @@ struct OnboardingView: View {
             // Update engaged state
             isEngaged = isEngagedProvider()
 
-            // Update volume/brightness with bounce animation on change
+            // Update volume/brightness levels
             let newVolume = volumeProvider() ?? 0
             let newBrightness = brightnessProvider() ?? 0
-
-            if abs(newVolume - previousVolume) > 0.01 && stepCount > previousStepCount - 1 {
-                withAnimation(.spring(response: 0.1, dampingFraction: 0.5)) {
-                    volumeBounce = 1.05
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    withAnimation(.spring(response: 0.1, dampingFraction: 0.7)) {
-                        volumeBounce = 1.0
-                    }
-                }
-            }
-            if abs(newBrightness - previousBrightness) > 0.01 && stepCount > previousStepCount - 1 {
-                withAnimation(.spring(response: 0.1, dampingFraction: 0.5)) {
-                    brightnessBounce = 1.05
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    withAnimation(.spring(response: 0.1, dampingFraction: 0.7)) {
-                        brightnessBounce = 1.0
-                    }
-                }
-            }
 
             previousVolume = newVolume
             previousBrightness = newBrightness
@@ -318,7 +295,7 @@ struct OnboardingView: View {
 
     // MARK: - Control Bars (Volume & Brightness)
 
-    // UNVERIFIED: ProgressView linear style with scaleEffect animation on macOS 14+.
+    // UNVERIFIED: ProgressView linear style on macOS 14+.
     private var controlBars: some View {
         HStack(spacing: 16) {
             // Brightness bar
@@ -331,7 +308,6 @@ struct OnboardingView: View {
                     .progressViewStyle(.linear)
                     .frame(maxWidth: .infinity)
             }
-            .scaleEffect(brightnessBounce)
 
             // Volume bar
             HStack(spacing: 6) {
@@ -343,7 +319,6 @@ struct OnboardingView: View {
                     .progressViewStyle(.linear)
                     .frame(maxWidth: .infinity)
             }
-            .scaleEffect(volumeBounce)
         }
     }
 
