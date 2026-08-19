@@ -1,24 +1,44 @@
 import SwiftUI
 import ServiceManagement
 
-/// The root SwiftUI view for the Settings window, containing three tabs.
-// UNVERIFIED: TabView with .automatic tabViewStyle on macOS 14+.
+/// The root SwiftUI view for the Settings window, using a sidebar navigation style.
+// UNVERIFIED: NavigationSplitView on macOS 14+ for settings sidebar.
 struct SettingsView: View {
     var viewModel: SettingsViewModel
 
-    var body: some View {
-        TabView {
-            GestureSettingsTab(viewModel: viewModel)
-                .tabItem { Label("Gesture", systemImage: "hand.draw") }
+    @State private var selectedTab: SettingsTab = .gesture
 
-            BehaviorSettingsTab(viewModel: viewModel)
-                .tabItem { Label("Behavior", systemImage: "gearshape") }
+    enum SettingsTab: String, CaseIterable {
+        case gesture = "Gesture"
+        case behavior = "Behavior"
+        case about = "About"
 
-            AboutTab()
-                .tabItem { Label("About", systemImage: "info.circle") }
+        var icon: String {
+            switch self {
+            case .gesture: return "hand.draw"
+            case .behavior: return "gearshape"
+            case .about: return "info.circle"
+            }
         }
-        // UNVERIFIED: .automatic style is the default for macOS TabView but being explicit.
-        .frame(width: 460, height: 360)
+    }
+
+    var body: some View {
+        NavigationSplitView {
+            List(SettingsTab.allCases, id: \.self, selection: $selectedTab) { tab in
+                Label(tab.rawValue, systemImage: tab.icon)
+            }
+            .navigationSplitViewColumnWidth(min: 140, ideal: 160, max: 180)
+        } detail: {
+            switch selectedTab {
+            case .gesture:
+                GestureSettingsTab(viewModel: viewModel)
+            case .behavior:
+                BehaviorSettingsTab(viewModel: viewModel)
+            case .about:
+                AboutTab()
+            }
+        }
+        .frame(width: 580, height: 400)
     }
 }
 
