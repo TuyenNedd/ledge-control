@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 /// A view that manages the per-app exclusion list, allowing users to add and remove apps
 /// whose frontmost status should disable gesture detection.

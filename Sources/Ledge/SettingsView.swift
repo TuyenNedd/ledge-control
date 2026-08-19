@@ -1,6 +1,7 @@
 import SwiftUI
 import ServiceManagement
 import LedgeCore
+import UniformTypeIdentifiers
 
 /// The root SwiftUI view for the Settings window, using a sidebar with grouped sections.
 struct SettingsView: View {
@@ -84,6 +85,25 @@ struct GeneralSettingsTab: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .padding(.leading, 20)
+
+            // MARK: - Settings Data section
+            Text("SETTINGS DATA")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .padding(.top, 24)
+
+            HStack(spacing: 12) {
+                Button("Export Settings") {
+                    viewModel.exportSettings()
+                }
+                Button("Import Settings") {
+                    viewModel.importSettings()
+                }
+            }
+            Text("Export or import all Ledge settings as a JSON file.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 16)
@@ -210,6 +230,51 @@ final class SettingsViewModel {
     /// Remove a bundle identifier from the exclusion list.
     func removeExcludedApp(_ bundleID: String) {
         excludedApps.removeAll { $0 == bundleID }
+    }
+
+    /// Export all settings to a JSON file via NSSavePanel.
+    func exportSettings() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "ledge-settings.json"
+        panel.title = "Export Settings"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let data = SettingsIO.exportSettings(from: preferences)
+        try? data.write(to: url)
+    }
+
+    /// Import settings from a JSON file via NSOpenPanel, then refresh.
+    func importSettings() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.title = "Import Settings"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let data = try? Data(contentsOf: url) else { return }
+        SettingsIO.importSettings(from: data, into: preferences)
+        // Refresh all view model properties from the updated preferences.
+        reloadFromPreferences()
+        applyPreferencesClosure()
+    }
+
+    /// Re-read all properties from preferences. Called after import to sync the UI.
+    private func reloadFromPreferences() {
+        let settings = preferences.gestureSettings
+        edgeBandWidth = settings.edgeBandWidth
+        activationDistance = settings.activationDistance
+        fineControl = settings.fineControl
+        swapSides = settings.swapSides
+        bottomQuarterOnly = settings.bottomQuarterOnly
+        typingLockout = settings.typingLockout
+        gestureTimeout = settings.gestureTimeout
+        isEnabled = preferences.isEnabled
+        cursorFreezeEnabled = preferences.cursorFreezeEnabled
+        useCoreAudioVolume = preferences.useCoreAudioVolume
+        modifierKeyRequired = preferences.modifierKeyRequired
+        excludedApps = preferences.excludedApps
     }
 
     /// Applies preferences only when not in the middle of a slider drag.
