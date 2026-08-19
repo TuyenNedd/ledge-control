@@ -48,32 +48,44 @@ struct SettingsView: View {
                 }
             }
         }
-        .frame(width: 680, height: 500)
+        .frame(width: 780, height: 580)
     }
 }
 
-/// General tab — launch at login, enable/disable.
+/// General tab - enable/disable and launch at login.
+/// Redesigned to match DockDoor-style layout with section headers and descriptions.
 struct GeneralSettingsTab: View {
     var viewModel: SettingsViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("GENERAL")
+        VStack(alignment: .leading, spacing: 12) {
+            // MARK: - Application section
+            Text("APPLICATION")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .padding(.top, 20)
+                .textCase(.uppercase)
 
             Toggle("Enable Ledge", isOn: Binding(
                 get: { viewModel.isEnabled },
                 set: { viewModel.isEnabled = $0 }
             ))
+            Text("Master switch - disables all gesture detection when off.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 20)
 
-            Toggle("Launch at login", isOn: Binding(
+            Toggle("Launch at Login", isOn: Binding(
                 get: { viewModel.launchAtLogin },
                 set: { viewModel.launchAtLogin = $0 }
             ))
+                .padding(.top, 8)
+            Text("Start Ledge automatically when you log in.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 20)
         }
         .padding(.horizontal, 24)
+        .padding(.vertical, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }

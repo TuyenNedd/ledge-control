@@ -16,7 +16,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         let viewModel = SettingsViewModel(preferences: preferences, applyPreferences: applyPreferences)
         let hostingController = NSHostingController(rootView: SettingsView(viewModel: viewModel))
 
-        let contentFrame = NSRect(x: 0, y: 0, width: 680, height: 500)
+        let contentFrame = NSRect(x: 0, y: 0, width: 780, height: 580)
         window = NSWindow(
             contentRect: contentFrame,
             styleMask: [.titled, .closable, .fullSizeContentView],

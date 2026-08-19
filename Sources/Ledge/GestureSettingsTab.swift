@@ -1,62 +1,109 @@
 import SwiftUI
 
 /// The Gesture tab in Settings, containing the trackpad preview and gesture-related sliders/toggles.
+/// Redesigned to match DockDoor-style layout with section headers, full-width sliders, and descriptions.
 struct GestureSettingsTab: View {
     @Bindable var viewModel: SettingsViewModel
 
     var body: some View {
-        // UNVERIFIED: Form layout with sections inside a TabView tab on macOS 14+.
-        Form {
-            Section {
-                TrackpadPreviewView(
-                    edgeBandWidth: $viewModel.edgeBandWidth,
-                    swapSides: viewModel.swapSides
+        VStack(alignment: .leading, spacing: 12) {
+            // MARK: - Trackpad Preview section
+            Text("TRACKPAD PREVIEW")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+
+            TrackpadPreviewView(
+                edgeBandWidth: $viewModel.edgeBandWidth,
+                swapSides: viewModel.swapSides
+            )
+            .frame(height: 130)
+
+            // MARK: - Edge Sensitivity section
+            Text("EDGE SENSITIVITY")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .padding(.top, 24)
+
+            // Edge Band Width slider
+            Text("Edge Band Width")
+                .font(.body)
+
+            HStack(spacing: 8) {
+                // UNVERIFIED: Slider with step parameter and onEditingChanged on macOS 14+.
+                Slider(
+                    value: $viewModel.edgeBandWidth,
+                    in: 0.01...0.10,
+                    step: 0.005,
+                    onEditingChanged: viewModel.sliderEditingChanged
                 )
-                .frame(height: 100)
-                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity)
+
+                Text(edgeBandWidthLabel)
+                    .font(.caption)
+                    .monospacedDigit()
+                    .padding(4)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(Color.gray.opacity(0.1)))
             }
 
-            Section("Edge Width") {
-                HStack {
-                    // UNVERIFIED: Slider with step parameter and onEditingChanged on macOS.
-                    Slider(
-                        value: $viewModel.edgeBandWidth,
-                        in: 0.01...0.10,
-                        step: 0.005,
-                        onEditingChanged: viewModel.sliderEditingChanged
-                    )
-                    Text(edgeBandWidthLabel)
-                        .monospacedDigit()
-                        .frame(width: 110, alignment: .trailing)
-                }
+            Text("The zone along the trackpad edge where gestures are detected.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+
+            // Activation Distance slider
+            Text("Activation Distance")
+                .font(.body)
+                .padding(.top, 12)
+
+            HStack(spacing: 8) {
+                Slider(
+                    value: $viewModel.activationDistance,
+                    in: 0.01...0.10,
+                    step: 0.005,
+                    onEditingChanged: viewModel.sliderEditingChanged
+                )
+                .frame(maxWidth: .infinity)
+
+                Text(String(format: "%.3f", viewModel.activationDistance))
+                    .font(.caption)
+                    .monospacedDigit()
+                    .padding(4)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(Color.gray.opacity(0.1)))
             }
 
-            Section("Activation Distance") {
-                HStack {
-                    Slider(
-                        value: $viewModel.activationDistance,
-                        in: 0.01...0.10,
-                        step: 0.005,
-                        onEditingChanged: viewModel.sliderEditingChanged
-                    )
-                    Text(String(format: "%.3f", viewModel.activationDistance))
-                        .monospacedDigit()
-                        .frame(width: 50, alignment: .trailing)
-                }
-            }
+            Text("How far you must slide before a gesture activates.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
 
-            Section("Options") {
-                Toggle("Fine Control", isOn: $viewModel.fineControl)
-                Toggle("Swap Sides", isOn: $viewModel.swapSides)
-            }
+            // MARK: - Options section
+            Text("OPTIONS")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .padding(.top, 24)
+
+            Toggle("Fine Control", isOn: $viewModel.fineControl)
+            Text("Use smaller volume/brightness steps for precise adjustments.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 20)
+
+            Toggle("Swap Sides", isOn: $viewModel.swapSides)
+                .padding(.top, 8)
+            Text("Put volume on the left edge and brightness on the right.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 20)
         }
-        .formStyle(.grouped)
-        .padding()
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    /// Displays both the fraction value and approximate mm (1.0 fraction = ~160mm trackpad width).
+    /// Displays approximate mm value (1.0 fraction = ~160mm trackpad width).
     private var edgeBandWidthLabel: String {
         let mm = viewModel.edgeBandWidth * 160.0
-        return String(format: "%.3f (~%.1f mm)", viewModel.edgeBandWidth, mm)
+        return String(format: "%.1f mm", mm)
     }
 }
