@@ -51,31 +51,30 @@ struct TrackpadPreviewView: View {
                             .strokeBorder(Color.gray.opacity(0.3), lineWidth: 1.5)
                     )
 
-                // Left edge band
+                // Left edge band — flush to the left edge, no padding
                 HStack(spacing: 0) {
-                    RoundedRectangle(cornerRadius: 10)
+                    RoundedRectangle(cornerRadius: 0)
                         .fill(leftBandActive ? Color.blue.opacity(0.6) : Color.blue.opacity(0.2))
-                        .frame(width: bandPixelWidth, height: height - 6)
+                        .frame(width: bandPixelWidth, height: height)
                         .animation(.easeInOut(duration: 0.2), value: leftBandActive)
                     Spacer()
                 }
-                .padding(.horizontal, 3)
 
-                // Right edge band
+                // Right edge band — flush to the right edge, no padding
                 HStack(spacing: 0) {
                     Spacer()
-                    RoundedRectangle(cornerRadius: 10)
+                    RoundedRectangle(cornerRadius: 0)
                         .fill(rightBandActive ? Color.blue.opacity(0.6) : Color.blue.opacity(0.2))
-                        .frame(width: bandPixelWidth, height: height - 6)
+                        .frame(width: bandPixelWidth, height: height)
                         .animation(.easeInOut(duration: 0.2), value: rightBandActive)
                 }
-                .padding(.horizontal, 3)
 
                 // Center mm label
                 Text(mmLabel)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+            .clipShape(RoundedRectangle(cornerRadius: 14))
         }
         .aspectRatio(3.0 / 2.0, contentMode: .fit)
     }
