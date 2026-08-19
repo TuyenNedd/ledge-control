@@ -57,6 +57,8 @@ app: build
 	cp Resources/Info.plist "$(CONTENTS)/Info.plist"
 	printf 'APPL????' > "$(CONTENTS)/PkgInfo"
 	cp "$(BIN_DIR)/$(APP_NAME)" "$(CONTENTS)/MacOS/$(APP_NAME)"
+	@# Add rpath so the binary finds frameworks in Contents/Frameworks/
+	install_name_tool -add_rpath @executable_path/../Frameworks "$(CONTENTS)/MacOS/$(APP_NAME)" 2>/dev/null || true
 	@# Copy Sparkle.framework into the bundle so the dynamic linker can find it at @rpath
 	@SPARKLE_PATH=$$(find .build -path "*/artifacts/Sparkle/Sparkle.framework" -type d 2>/dev/null | head -1); \
 	if [ -n "$$SPARKLE_PATH" ]; then \
