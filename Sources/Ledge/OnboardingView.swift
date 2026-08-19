@@ -190,8 +190,8 @@ struct OnboardingView: View {
                 .fontWeight(.semibold)
 
             // Trackpad preview with vertical progress bars on each side
-            HStack(spacing: 12) {
-                // Left: brightness vertical bar
+            HStack(spacing: 0) {
+                // Left: brightness vertical bar — flush against trackpad
                 VStack(spacing: 4) {
                     Image(systemName: "sun.max.fill")
                         .font(.caption)
@@ -214,8 +214,9 @@ struct OnboardingView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
+                .frame(width: 50)
 
-                // Trackpad preview with arrow hint
+                // Trackpad preview with arrow hint — no spacing from bars
                 ZStack(alignment: .trailing) {
                     TrackpadPreviewView(
                         edgeBandWidth: .constant(preferences.gestureSettings.edgeBandWidth),
@@ -241,7 +242,7 @@ struct OnboardingView: View {
                     }
                 }
 
-                // Right: volume vertical bar
+                // Right: volume vertical bar — flush against trackpad
                 VStack(spacing: 4) {
                     Image(systemName: "speaker.wave.2.fill")
                         .font(.caption)
@@ -264,9 +265,10 @@ struct OnboardingView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
+                .frame(width: 50)
             }
             .frame(height: 160)
-            .padding(.horizontal, 40)
+            .padding(.horizontal, 30)
 
             Text(instructionText)
                 .font(.body)
