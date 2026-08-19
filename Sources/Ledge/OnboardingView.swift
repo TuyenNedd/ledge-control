@@ -43,8 +43,6 @@ struct OnboardingView: View {
     @State private var celebrationScale: CGFloat = 1.0
     @State private var getStartedScale: CGFloat = 1.0
     @State private var previousStepCount = 0
-    @State private var previousVolume: Float = 0
-    @State private var previousBrightness: Float = 0
 
     /// Timer publishers that SwiftUI manages automatically (cancelled when the view leaves the
     /// hierarchy). Accessibility poll starts only after `accessibilityCheckEnabled` is set.
@@ -168,43 +166,89 @@ struct OnboardingView: View {
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            // Trackpad preview with live finger indicator and arrow hint
-            ZStack(alignment: .trailing) {
-                TrackpadPreviewView(
-                    edgeBandWidth: .constant(preferences.gestureSettings.edgeBandWidth),
-                    swapSides: preferences.gestureSettings.swapSides,
-                    fingerPosition: fingerPosition,
-                    isEngaged: isEngaged
-                )
-                .frame(height: 140)
-
-                // Animated arrow hint (visible only when no steps detected yet)
-                // UNVERIFIED: SF Symbol "arrow.up.and.down" with repeating offset animation on macOS 14+.
-                if stepCount == 0 && arrowVisible {
-                    Image(systemName: "arrow.up.and.down")
-                        .font(.title2)
-                        .foregroundStyle(.blue.opacity(0.7))
-                        .offset(y: arrowOffset)
-                        .padding(.trailing, 8)
-                        .onAppear {
-                            withAnimation(
-                                .easeInOut(duration: 1.0)
-                                .repeatForever(autoreverses: true)
-                            ) {
-                                arrowOffset = 10
-                            }
+            // Trackpad preview with vertical progress bars on each side
+            HStack(spacing: 12) {
+                // Left: brightness vertical bar
+                VStack(spacing: 4) {
+                    Image(systemName: "sun.max.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    GeometryReader { geo in
+                        let fillHeight = geo.size.height * CGFloat(brightnessLevel)
+                        VStack(spacing: 0) {
+                            Spacer()
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(Color.yellow.opacity(0.7))
+                                .frame(height: fillHeight)
                         }
+                        .background(
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(Color.gray.opacity(0.15))
+                        )
+                    }
+                    .frame(width: 6)
+                    Text(leftLabel)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                // Trackpad preview with arrow hint
+                ZStack(alignment: .trailing) {
+                    TrackpadPreviewView(
+                        edgeBandWidth: .constant(preferences.gestureSettings.edgeBandWidth),
+                        swapSides: preferences.gestureSettings.swapSides,
+                        fingerPosition: fingerPosition,
+                        isEngaged: isEngaged
+                    )
+
+                    // Animated arrow hint (visible only when no steps detected yet)
+                    if stepCount == 0 && arrowVisible {
+                        Image(systemName: "arrow.up.and.down")
+                            .font(.title2)
+                            .foregroundStyle(.blue.opacity(0.7))
+                            .offset(y: arrowOffset)
+                            .padding(.trailing, 8)
+                            .onAppear {
+                                withAnimation(
+                                    .easeInOut(duration: 1.0)
+                                    .repeatForever(autoreverses: true)
+                                ) {
+                                    arrowOffset = 10
+                                }
+                            }
+                    }
+                }
+
+                // Right: volume vertical bar
+                VStack(spacing: 4) {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    GeometryReader { geo in
+                        let fillHeight = geo.size.height * CGFloat(volumeLevel)
+                        VStack(spacing: 0) {
+                            Spacer()
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(Color.blue.opacity(0.7))
+                                .frame(height: fillHeight)
+                        }
+                        .background(
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(Color.gray.opacity(0.15))
+                        )
+                    }
+                    .frame(width: 6)
+                    Text(rightLabel)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
+            .frame(height: 160)
             .padding(.horizontal, 40)
 
             Text("Slide along the right edge now")
                 .font(.body)
                 .foregroundStyle(.secondary)
-
-            // Volume/Brightness bars
-            controlBars
-                .padding(.horizontal, 60)
 
             // Live step count feedback with celebration
             stepCountView
@@ -278,47 +322,13 @@ struct OnboardingView: View {
             // Update engaged state
             isEngaged = isEngagedProvider()
 
-            // Update volume/brightness levels
-            let newVolume = volumeProvider() ?? 0
-            let newBrightness = brightnessProvider() ?? 0
-
-            previousVolume = newVolume
-            previousBrightness = newBrightness
-            volumeLevel = newVolume
-            brightnessLevel = newBrightness
+            // Update volume/brightness levels directly
+            volumeLevel = volumeProvider() ?? 0
+            brightnessLevel = brightnessProvider() ?? 0
         }
         .onReceive(accessibilityTimer) { _ in
             guard accessibilityCheckEnabled else { return }
             isAccessibilityGranted = Permissions.isTrusted()
-        }
-    }
-
-    // MARK: - Control Bars (Volume & Brightness)
-
-    // UNVERIFIED: ProgressView linear style on macOS 14+.
-    private var controlBars: some View {
-        HStack(spacing: 16) {
-            // Brightness bar
-            HStack(spacing: 6) {
-                Image(systemName: "sun.max.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 14)
-                ProgressView(value: Double(brightnessLevel), total: 1.0)
-                    .progressViewStyle(.linear)
-                    .frame(maxWidth: .infinity)
-            }
-
-            // Volume bar
-            HStack(spacing: 6) {
-                Image(systemName: "speaker.wave.2.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 14)
-                ProgressView(value: Double(volumeLevel), total: 1.0)
-                    .progressViewStyle(.linear)
-                    .frame(maxWidth: .infinity)
-            }
         }
     }
 
