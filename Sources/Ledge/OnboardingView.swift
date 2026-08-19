@@ -2,16 +2,17 @@ import AppKit
 import Combine
 import SwiftUI
 
-/// A three-page onboarding flow shown on first launch.
+/// A two-page onboarding flow shown on first launch.
 ///
 /// Pages:
-/// 1. **Welcome** - App icon, title, one-sentence description.
-/// 2. **Permission** - Explains Accessibility requirement, button to open System Settings,
-///    live poll of `AXIsProcessTrusted()` with a green checkmark when granted.
-/// 3. **Try It** - Trackpad preview with live step count feedback from the gesture controller.
+/// 1. **Permission** - App icon, welcome text, explains Accessibility requirement, button to
+///    open System Settings, live "Waiting for permission..." / "Permission granted" status.
+///    Combines the old Welcome and Permission pages into one — the user sees what the app does
+///    and what it needs at the same time.
+/// 2. **Try It** - Trackpad preview with live step count feedback from the gesture controller.
 ///
-/// Navigation is via Next/Back buttons at the bottom. "Get Started" on the final page marks
-/// onboarding complete and closes the window.
+/// "Continue" on page 1 advances to page 2 (enabled even without permission, but shows a note).
+/// "Get Started" on page 2 marks onboarding complete and closes the window.
 // UNVERIFIED: SwiftUI view with @State navigation, Timer.publish, and NSImage bridging on macOS 14+.
 struct OnboardingView: View {
     let preferences: Preferences
@@ -21,28 +22,33 @@ struct OnboardingView: View {
     @State private var currentPage = 0
     @State private var isAccessibilityGranted = false
     @State private var stepCount = 0
+    @State private var accessibilityCheckEnabled = false
 
     /// Timer publishers that SwiftUI manages automatically (cancelled when the view leaves the
-    /// hierarchy), fixing the timer leak from the original scheduledTimer approach.
-    /// Accessibility poll starts with a 3-second delay so the onboarding window appears BEFORE
-    /// any system prompt that AXIsProcessTrustedWithOptions might trigger on first call.
+    /// hierarchy). Accessibility poll starts only after `accessibilityCheckEnabled` is set.
     private let accessibilityTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
     private let stepTimer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
 
-    @State private var accessibilityCheckEnabled = false
-
-    private let totalPages = 3
+    private let totalPages = 2
 
     var body: some View {
         VStack(spacing: 0) {
+            // Page dots
+            HStack(spacing: 6) {
+                ForEach(0..<totalPages, id: \.self) { index in
+                    Circle()
+                        .fill(index == currentPage ? Color.blue : Color.gray.opacity(0.4))
+                        .frame(width: 8, height: 8)
+                }
+            }
+            .padding(.top, 16)
+
             // Page content
             Group {
                 switch currentPage {
                 case 0:
-                    welcomePage
-                case 1:
                     permissionPage
-                case 2:
+                case 1:
                     tryItPage
                 default:
                     EmptyView()
@@ -58,48 +64,37 @@ struct OnboardingView: View {
                 .padding(.vertical, 12)
         }
         .frame(width: 550, height: 450)
+        .onAppear {
+            // Delay the first AXIsProcessTrustedWithOptions call so the window is fully
+            // visible before macOS potentially shows its own system prompt.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                accessibilityCheckEnabled = true
+            }
+        }
     }
 
-    // MARK: - Page 1: Welcome
+    // MARK: - Page 1: Permission (combined Welcome + Permission)
 
-    private var welcomePage: some View {
-        VStack(spacing: 20) {
+    private var permissionPage: some View {
+        VStack(spacing: 16) {
             Spacer()
 
-            // UNVERIFIED: NSImage(named: NSImage.applicationIconName) bridged to SwiftUI Image.
+            // App icon
             Image(nsImage: NSImage(named: NSImage.applicationIconName) ?? NSImage())
                 .resizable()
-                .frame(width: 96, height: 96)
+                .frame(width: 80, height: 80)
 
-            Text("Welcome to Ledge")
-                .font(.largeTitle)
+            Text("Allow Accessibility Access")
+                .font(.title)
                 .fontWeight(.bold)
 
-            Text("Trackpad edge gestures for volume and brightness control")
+            Text("Ledge watches trackpad touches and turns edge slides into volume and brightness changes. macOS calls that kind of superpower \"Accessibility\" and wants your explicit OK.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
 
-            Spacer()
-        }
-    }
-
-    // MARK: - Page 2: Permission
-
-    private var permissionPage: some View {
-        VStack(spacing: 20) {
-            Spacer()
-
-            Image(systemName: "lock.shield")
-                .font(.system(size: 48))
-                .foregroundStyle(.blue)
-
-            Text("Accessibility Permission")
-                .font(.title2)
-                .fontWeight(.semibold)
-
-            Text("Ledge reads trackpad touches through an event tap, which macOS only allows for apps trusted in Privacy & Security.")
+            Text("Open System Settings below, find Ledge in the Accessibility list, and toggle it on.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -114,16 +109,15 @@ struct OnboardingView: View {
                     Text("Permission granted")
                         .foregroundStyle(.green)
                 } else {
-                    Image(systemName: "xmark.circle")
-                        .foregroundStyle(.orange)
-                        .font(.title3)
-                    Text("Permission not yet granted")
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Waiting for permission...")
                         .foregroundStyle(.orange)
                 }
             }
             .padding(.top, 8)
 
-            // UNVERIFIED: Button opening URL via NSWorkspace on macOS 14+.
+            // Open Settings button
             Button("Open System Settings") {
                 if let url = URL(
                     string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
@@ -131,26 +125,18 @@ struct OnboardingView: View {
                     NSWorkspace.shared.open(url)
                 }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .padding(.top, 4)
 
             Spacer()
         }
-        // UNVERIFIED: .onReceive with Timer.publish for polling AXIsProcessTrusted in SwiftUI.
         .onReceive(accessibilityTimer) { _ in
             guard accessibilityCheckEnabled else { return }
             isAccessibilityGranted = Permissions.isTrusted()
         }
-        .onAppear {
-            // Delay the first AXIsProcessTrustedWithOptions call by 3 seconds so the onboarding
-            // window is fully visible before macOS potentially shows its own system prompt.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                accessibilityCheckEnabled = true
-            }
-        }
     }
 
-    // MARK: - Page 3: Try It
+    // MARK: - Page 2: Try It
 
     private var tryItPage: some View {
         VStack(spacing: 16) {
@@ -160,8 +146,6 @@ struct OnboardingView: View {
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            // Reuse the existing trackpad preview from the settings tab.
-            // Use a constant binding since we just want to show the current setting.
             TrackpadPreviewView(
                 edgeBandWidth: .constant(preferences.gestureSettings.edgeBandWidth),
                 swapSides: preferences.gestureSettings.swapSides
@@ -184,7 +168,7 @@ struct OnboardingView: View {
             .padding(.top, 4)
 
             if !isAccessibilityGranted {
-                Text("Permission not yet granted - the app will not work until you grant Accessibility access.")
+                Text("Permission not yet granted — gestures won't work until you allow Accessibility access.")
                     .font(.caption)
                     .foregroundStyle(.orange)
                     .multilineTextAlignment(.center)
@@ -193,9 +177,12 @@ struct OnboardingView: View {
 
             Spacer()
         }
-        // UNVERIFIED: .onReceive with Timer.publish for polling step count in SwiftUI.
         .onReceive(stepTimer) { _ in
             stepCount = stepCountProvider()
+        }
+        .onReceive(accessibilityTimer) { _ in
+            guard accessibilityCheckEnabled else { return }
+            isAccessibilityGranted = Permissions.isTrusted()
         }
     }
 
@@ -212,7 +199,7 @@ struct OnboardingView: View {
             Spacer()
 
             if currentPage < totalPages - 1 {
-                Button("Next") {
+                Button("Continue") {
                     currentPage += 1
                 }
                 .buttonStyle(.borderedProminent)
@@ -225,8 +212,6 @@ struct OnboardingView: View {
             }
         }
     }
-
-    // MARK: - Polling (handled via .onReceive modifiers above)
 }
 
 /// Coordinator that allows the onboarding view to close its host window without requiring a
