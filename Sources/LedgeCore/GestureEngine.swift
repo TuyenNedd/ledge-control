@@ -28,6 +28,9 @@ public struct GestureEngine: Sendable {
     private var lastTypingTime: Double?
     /// When the last frame arrived, for spotting a gap the gesture should not survive.
     private var lastFrameTime: Double?
+    /// Whether the required modifier key is currently held. Only consulted when
+    /// `settings.modifierKeyRequired != .none`.
+    private var modifierHeld: Bool = false
 
     /// The top of the "bottom quarter", in trackpad heights.
     ///
@@ -69,6 +72,22 @@ public struct GestureEngine: Sendable {
     /// not change whether the engine is listening; the next gesture is allowed.
     public mutating func cancel() -> [GestureEvent] {
         end()
+    }
+
+    /// Report whether the required modifier key is currently held.
+    ///
+    /// When `settings.modifierKeyRequired` is `.none`, this has no effect. Otherwise:
+    /// - If `held` is false and a gesture is in flight, the gesture is ended immediately.
+    /// - If `held` is false and no gesture is in flight, arming is suppressed on subsequent
+    ///   frames (the same suppression as the typing lockout).
+    /// - If `held` is true, normal behaviour resumes.
+    public mutating func setModifierHeld(_ held: Bool) -> [GestureEvent] {
+        modifierHeld = held
+        guard settings.modifierKeyRequired != .none else { return [] }
+        if !held {
+            return end()
+        }
+        return []
     }
 
     /// Feed one frame of touch data and act on whatever it implies.
@@ -160,6 +179,11 @@ public struct GestureEngine: Sendable {
         // Left undecided rather than rejected, so a finger already resting at the edge when the
         // user stops typing can still become a gesture once the window passes, without lifting.
         if let lastTypingTime, timestamp - lastTypingTime < settings.typingLockout { return [] }
+
+        // Same treatment as typing lockout: when a modifier is required and not held, do not
+        // arm. The finger is not rejected, so it can still become a gesture if the modifier is
+        // pressed before it lifts.
+        if settings.modifierKeyRequired != .none && !modifierHeld { return [] }
 
         guard let edge = settings.edge(forX: touch.position.x),
               !settings.bottomQuarterOnly || touch.position.y <= Self.bottomQuarterTop

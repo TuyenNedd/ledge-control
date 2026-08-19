@@ -1,4 +1,5 @@
 import SwiftUI
+import LedgeCore
 
 /// The Behavior tab in Settings, containing toggles and sliders for app-level behavior.
 /// Redesigned to match DockDoor-style layout with section headers, full-width sliders, and descriptions.
@@ -22,6 +23,17 @@ struct BehaviorSettingsTab: View {
             Toggle("Bottom Quarter Only", isOn: $viewModel.bottomQuarterOnly)
                 .padding(.top, 8)
             Text("Only detect gestures in the bottom quarter of the trackpad.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .padding(.leading, 20)
+
+            Picker("Modifier Key Required", selection: $viewModel.modifierKeyRequired) {
+                ForEach(ModifierKeyMode.allCases, id: \.self) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+            .padding(.top, 8)
+            Text("Require holding a modifier key before gestures activate.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .padding(.leading, 20)
@@ -82,6 +94,15 @@ struct BehaviorSettingsTab: View {
             Text("How long a pause before a gesture is considered finished.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
+
+            // MARK: - Excluded Apps section
+            Text("EXCLUDED APPS")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+                .padding(.top, 24)
+
+            ExcludedAppsView(viewModel: viewModel)
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 16)

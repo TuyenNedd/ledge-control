@@ -46,6 +46,11 @@ final class GestureController {
     private(set) var frameCount = 0
     private(set) var stepCount = 0
 
+    /// Tracks the previously frontmost app's bundle ID so we know when we leave an excluded app.
+    private var previousFrontmostBundleID: String?
+    /// The exclusion list, derived from preferences.
+    private var exclusionList: AppExclusionList
+
     init(preferences: Preferences, touchSource: TouchSource) {
         self.preferences = preferences
         self.touchSource = touchSource
@@ -53,6 +58,7 @@ final class GestureController {
         self.mediaKeyVolume = VolumeController()
         self.coreAudioVolume = CoreAudioVolumeController()
         self.engine = GestureEngine(settings: preferences.gestureSettings)
+        self.exclusionList = AppExclusionList(bundleIDs: preferences.excludedApps)
     }
 
     /// - Returns: false if the touch source could not start, which means Accessibility permission
@@ -61,11 +67,22 @@ final class GestureController {
         touchSource.onFrame = { [weak self] frame in self?.receive(frame) }
         touchSource.onTyping = { [weak self] timestamp in self?.receiveTyping(at: timestamp) }
         touchSource.onInterrupted = { [weak self] in self?.interrupt() }
+        touchSource.onModifierChanged = { [weak self] held in self?.receiveModifierChanged(held) }
         applyPreferences()
+
+        // Observe frontmost app changes for per-app exclusion.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(frontmostAppChanged(_:)),
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil
+        )
+
         return touchSource.start()
     }
 
     func stop() {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
         interrupt()
         touchSource.stop()
     }
@@ -77,6 +94,8 @@ final class GestureController {
     func applyPreferences() {
         engine.settings = preferences.gestureSettings
         touchSource.cursorFreezeEnabled = preferences.cursorFreezeEnabled
+        touchSource.requiredModifierKey = preferences.modifierKeyRequired
+        exclusionList = AppExclusionList(bundleIDs: preferences.excludedApps)
         // Forwarded because switching off ends a gesture in flight, and that has to reach the
         // haptics and the cursor-freeze flag. Switching on returns nothing, so re-asserting the
         // current state is harmless.
@@ -93,11 +112,35 @@ final class GestureController {
         apply(engine.noteTyping(at: timestamp))
     }
 
+    private func receiveModifierChanged(_ held: Bool) {
+        apply(engine.setModifierHeld(held))
+    }
+
     /// The world changed underneath us — the tap was disabled and re-enabled, so frames were
     /// missed. `cancel()` rather than `setEnabled(false)`, because the engine should still be
     /// listening for the next gesture.
     private func interrupt() {
         apply(engine.cancel())
+    }
+
+    /// Called when the frontmost application changes. Disables gesture detection for excluded
+    /// apps and re-enables it when switching away from one.
+    @objc private func frontmostAppChanged(_ notification: Notification) {
+        guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+        let newBundleID = app.bundleIdentifier
+
+        let wasExcluded = exclusionList.isExcluded(previousFrontmostBundleID)
+        let isExcluded = exclusionList.isExcluded(newBundleID)
+        previousFrontmostBundleID = newBundleID
+
+        if isExcluded && !wasExcluded {
+            apply(engine.setEnabled(false))
+        } else if !isExcluded && wasExcluded {
+            // Restore the user's preference rather than unconditionally enabling.
+            if preferences.isEnabled {
+                apply(engine.setEnabled(true))
+            }
+        }
     }
 
     private func apply(_ events: [GestureEvent]) {

@@ -44,5 +44,12 @@
 	<string>Copyright © 2026 Tuyen Nguyen. MIT licensed.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<!-- Sparkle auto-update configuration -->
+	<key>SUFeedURL</key>
+	<string>https://tuyennedd.github.io/ledge-control/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string></string>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
 </dict>
 </plist>

@@ -17,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var diagnostics: DiagnosticsWindow?
     private var settingsWindow: SettingsWindow?
     private var onboardingWindow: OnboardingWindow?
+    // UNVERIFIED: UpdateController wraps SPUStandardUpdaterController. It is only functional
+    // inside a properly bundled .app with Info.plist containing SUFeedURL.
+    private var updateController: UpdateController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let controller = GestureController(preferences: preferences, touchSource: touchSource)
@@ -34,6 +37,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onShowDiagnostics = { diagnostics.show() }
         menuBar.onShowSettings = { settingsWindow.show() }
         self.menuBar = menuBar
+
+        let updateController = UpdateController()
+        self.updateController = updateController
+        menuBar.onCheckForUpdates = { updateController.checkForUpdates() }
 
         if !preferences.hasCompletedOnboarding {
             // First launch: onboarding handles everything. Do NOT call Permissions.isTrusted()
