@@ -36,8 +36,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.menuBar = menuBar
 
         if !preferences.hasCompletedOnboarding {
-            // First launch: onboarding handles everything — permission explanation, granting,
-            // and auto-relaunch. Do NOT trigger the system Accessibility prompt here.
+            // First launch: onboarding handles everything. Do NOT call Permissions.isTrusted()
+            // or requestIfNeeded() here — on macOS 26, even a check-only call to
+            // AXIsProcessTrustedWithOptions can trigger the system "Accessibility Access" dialog
+            // the first time it sees this app, and that dialog appearing ON TOP of our onboarding
+            // window is confusing. The onboarding permission page has its own "Open System
+            // Settings" button and polls only AFTER a 3-second delay to let its window appear first.
             let onboarding = OnboardingWindow(
                 preferences: preferences,
                 stepCountProvider: { [weak controller] in controller?.stepCount ?? 0 }
@@ -45,20 +49,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.onboardingWindow = onboarding
             onboarding.show()
 
-            // Only start the tap if permission is already granted (e.g. user re-running
-            // onboarding after a defaults delete with permission still intact). If not granted,
-            // do NOT call controller.start() — that triggers CGEvent.tapCreate which makes macOS
-            // show its own "Accessibility Access" system dialog on top of our onboarding window.
-            // The onboarding permission page polls and auto-relaunches once granted.
-            if Permissions.isTrusted() {
-                _ = controller.start()
-            } else {
-                startPollingForPermission()
-            }
+            // Poll for permission in the background. Once granted, start the tap and relaunch
+            // so the onboarding "Try It" page can work.
+            startPollingForPermission()
         } else {
-            // Not first launch: if we have permission, start immediately.
-            // If not, show our own alert (do NOT call Permissions.requestIfNeeded — that
-            // triggers the system dialog which is redundant with our alert).
+            // Not first launch. Try to start silently — if permission exists, great.
+            // If not, show our alert (never the system prompt).
             if Permissions.isTrusted() {
                 _ = controller.start()
             } else {
@@ -102,13 +98,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Poll AXIsProcessTrusted every 2 seconds. When permission is granted, relaunch
-    /// automatically so the event tap can be created.
+    /// Poll AXIsProcessTrusted every 2 seconds. When permission is granted, start the tap
+    /// (or relaunch if needed). Delays the first check by 3 seconds so the onboarding window
+    /// has time to appear before any system prompt that the first isTrusted() call may trigger.
     private func startPollingForPermission() {
-        Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] timer in
-            if Permissions.isTrusted() {
-                timer.invalidate()
-                self?.relaunch()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] timer in
+                if Permissions.isTrusted() {
+                    timer.invalidate()
+                    // Permission granted — try to start the tap directly rather than relaunching
+                    if let controller = self?.controller, controller.start() {
+                        // Tap started successfully, no relaunch needed
+                    } else {
+                        self?.relaunch()
+                    }
+                }
             }
         }
     }

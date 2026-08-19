@@ -24,8 +24,12 @@ struct OnboardingView: View {
 
     /// Timer publishers that SwiftUI manages automatically (cancelled when the view leaves the
     /// hierarchy), fixing the timer leak from the original scheduledTimer approach.
-    private let accessibilityTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
+    /// Accessibility poll starts with a 3-second delay so the onboarding window appears BEFORE
+    /// any system prompt that AXIsProcessTrustedWithOptions might trigger on first call.
+    private let accessibilityTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
     private let stepTimer = Timer.publish(every: 0.2, on: .main, in: .common).autoconnect()
+
+    @State private var accessibilityCheckEnabled = false
 
     private let totalPages = 3
 
@@ -134,7 +138,15 @@ struct OnboardingView: View {
         }
         // UNVERIFIED: .onReceive with Timer.publish for polling AXIsProcessTrusted in SwiftUI.
         .onReceive(accessibilityTimer) { _ in
+            guard accessibilityCheckEnabled else { return }
             isAccessibilityGranted = Permissions.isTrusted()
+        }
+        .onAppear {
+            // Delay the first AXIsProcessTrustedWithOptions call by 3 seconds so the onboarding
+            // window is fully visible before macOS potentially shows its own system prompt.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                accessibilityCheckEnabled = true
+            }
         }
     }
 
