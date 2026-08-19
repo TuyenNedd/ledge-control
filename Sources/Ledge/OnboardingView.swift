@@ -44,6 +44,14 @@ struct OnboardingView: View {
     @State private var getStartedScale: CGFloat = 1.0
     @State private var previousStepCount = 0
 
+    private var leftLabel: String {
+        preferences.gestureSettings.swapSides ? "Volume" : "Brightness"
+    }
+
+    private var rightLabel: String {
+        preferences.gestureSettings.swapSides ? "Brightness" : "Volume"
+    }
+
     /// Timer publishers that SwiftUI manages automatically (cancelled when the view leaves the
     /// hierarchy). Accessibility poll starts only after `accessibilityCheckEnabled` is set.
     private let accessibilityTimer = Timer.publish(every: 2.0, on: .main, in: .common).autoconnect()
