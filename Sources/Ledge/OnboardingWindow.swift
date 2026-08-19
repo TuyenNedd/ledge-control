@@ -49,8 +49,11 @@ final class OnboardingWindow: NSObject, NSWindowDelegate {
 
     func show() {
         window.makeKeyAndOrderFront(nil)
-        // Required because the app is `.accessory`: without this the window can appear behind
-        // whatever the user was looking at.
+        // For a .accessory (LSUIElement) app, makeKeyAndOrderFront alone is not enough —
+        // the window can appear behind whatever the user was looking at. Both of these
+        // are needed: activate brings the app to the front, orderFrontRegardless ensures
+        // this specific window is above everything else regardless of app activation state.
+        window.orderFrontRegardless()
         NSApp.activate()
     }
 }
