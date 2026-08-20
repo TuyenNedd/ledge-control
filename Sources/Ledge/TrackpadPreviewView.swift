@@ -3,17 +3,18 @@ import LedgeCore
 
 /// An interactive 4-edge trackpad preview with draggable edge bands and action pickers.
 ///
-/// Shows a rounded rectangle representing the trackpad surface with visible bands on all four
-/// edges. Each band is:
+/// Shows a dark rounded rectangle representing the trackpad surface with thin colored bands
+/// flush against all four inner edges. Each band is:
 /// - Draggable to resize its width
 /// - Clickable to toggle enable/disable
 /// - Colored blue when enabled (opacity 0.3), grayed out when disabled (opacity 0.15)
+/// - Rendered with rounded ends for a polished appearance
+///
+/// Layout matches the Figma design: landscape-oriented dark trackpad body with a subtle border,
+/// edge bands as thin colored strips sitting directly on the inner edges with rounded corners.
 ///
 /// Action pickers are positioned OUTSIDE the trackpad shape: top dropdown above, bottom below,
 /// left to the left, right to the right.
-///
-/// UNVERIFIED: DragGesture behavior within a GeometryReader on macOS 14+ may have coordinate
-/// system nuances depending on the parent view hierarchy.
 struct InteractiveTrackpadPreview: View {
     @Binding var leftEdge: EdgeConfig
     @Binding var rightEdge: EdgeConfig
@@ -22,6 +23,15 @@ struct InteractiveTrackpadPreview: View {
 
     /// Which edge is currently engaged (for live feedback during gestures). Optional.
     var engagedEdge: TrackpadEdge?
+
+    /// Corner radius for the trackpad shape.
+    private let trackpadCornerRadius: CGFloat = 18
+
+    /// Inset from the trackpad border where edge bands are drawn.
+    private let bandInset: CGFloat = 3
+
+    /// Corner radius for edge band capsules.
+    private let bandCornerRadius: CGFloat = 4
 
     var body: some View {
         VStack(spacing: 8) {
@@ -34,7 +44,7 @@ struct InteractiveTrackpadPreview: View {
 
                 // The trackpad surface
                 trackpadView
-                    .aspectRatio(3.0 / 2.0, contentMode: .fit)
+                    .aspectRatio(16.0 / 10.0, contentMode: .fit)
 
                 // Right edge controls (to the right of trackpad)
                 edgeControlColumn(edge: .right, config: $rightEdge)
@@ -53,15 +63,15 @@ struct InteractiveTrackpadPreview: View {
             let height = geometry.size.height
 
             ZStack {
-                // Trackpad background
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Color.gray.opacity(0.12))
+                // Dark trackpad background with subtle border (Figma style)
+                RoundedRectangle(cornerRadius: trackpadCornerRadius)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.85))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .strokeBorder(Color.gray.opacity(0.3), lineWidth: 1.5)
+                        RoundedRectangle(cornerRadius: trackpadCornerRadius)
+                            .strokeBorder(Color.gray.opacity(0.35), lineWidth: 1.5)
                     )
 
-                // Left edge band
+                // Left edge band - thin vertical strip flush on left inner edge
                 edgeBand(
                     edge: .left,
                     config: $leftEdge,
@@ -69,7 +79,7 @@ struct InteractiveTrackpadPreview: View {
                     parentHeight: height
                 )
 
-                // Right edge band
+                // Right edge band - thin vertical strip flush on right inner edge
                 edgeBand(
                     edge: .right,
                     config: $rightEdge,
@@ -77,7 +87,7 @@ struct InteractiveTrackpadPreview: View {
                     parentHeight: height
                 )
 
-                // Top edge band
+                // Top edge band - thin horizontal strip flush on top inner edge
                 edgeBand(
                     edge: .top,
                     config: $topEdge,
@@ -85,7 +95,7 @@ struct InteractiveTrackpadPreview: View {
                     parentHeight: height
                 )
 
-                // Bottom edge band
+                // Bottom edge band - thin horizontal strip flush on bottom inner edge
                 edgeBand(
                     edge: .bottom,
                     config: $bottomEdge,
@@ -93,13 +103,12 @@ struct InteractiveTrackpadPreview: View {
                     parentHeight: height
                 )
             }
-            .clipShape(RoundedRectangle(cornerRadius: 14))
         }
     }
 
     // MARK: - Edge Band View
 
-    /// A single edge band overlay within the trackpad, draggable to resize.
+    /// A single edge band overlay within the trackpad as a thin rounded strip flush against the edge.
     @ViewBuilder
     private func edgeBand(
         edge: TrackpadEdge,
@@ -112,45 +121,48 @@ struct InteractiveTrackpadPreview: View {
 
         switch edge {
         case .left:
-            let bandPixelWidth = max(CGFloat(config.wrappedValue.bandWidth) * parentWidth, 8)
-            HStack(spacing: 0) {
-                Rectangle()
-                    .fill(bandColor)
-                    .frame(width: bandPixelWidth, height: parentHeight)
-                    .gesture(dragGestureHorizontal(config: config, parentWidth: parentWidth, fromLeft: true))
-                    .onTapGesture { config.wrappedValue.isEnabled.toggle() }
-                Spacer()
-            }
+            let bandPixelWidth = max(CGFloat(config.wrappedValue.bandWidth) * parentWidth, 6)
+            // Vertical strip on the left inner edge, inset from top/bottom
+            let bandHeight = parentHeight - (bandInset * 2) - (trackpadCornerRadius * 0.6)
+            RoundedRectangle(cornerRadius: bandCornerRadius)
+                .fill(bandColor)
+                .frame(width: bandPixelWidth, height: bandHeight)
+                .position(x: bandInset + bandPixelWidth / 2, y: parentHeight / 2)
+                .gesture(dragGestureHorizontal(config: config, parentWidth: parentWidth, fromLeft: true))
+                .onTapGesture { config.wrappedValue.isEnabled.toggle() }
+
         case .right:
-            let bandPixelWidth = max(CGFloat(config.wrappedValue.bandWidth) * parentWidth, 8)
-            HStack(spacing: 0) {
-                Spacer()
-                Rectangle()
-                    .fill(bandColor)
-                    .frame(width: bandPixelWidth, height: parentHeight)
-                    .gesture(dragGestureHorizontal(config: config, parentWidth: parentWidth, fromLeft: false))
-                    .onTapGesture { config.wrappedValue.isEnabled.toggle() }
-            }
+            let bandPixelWidth = max(CGFloat(config.wrappedValue.bandWidth) * parentWidth, 6)
+            // Vertical strip on the right inner edge, inset from top/bottom
+            let bandHeight = parentHeight - (bandInset * 2) - (trackpadCornerRadius * 0.6)
+            RoundedRectangle(cornerRadius: bandCornerRadius)
+                .fill(bandColor)
+                .frame(width: bandPixelWidth, height: bandHeight)
+                .position(x: parentWidth - bandInset - bandPixelWidth / 2, y: parentHeight / 2)
+                .gesture(dragGestureHorizontal(config: config, parentWidth: parentWidth, fromLeft: false))
+                .onTapGesture { config.wrappedValue.isEnabled.toggle() }
+
         case .top:
-            let bandPixelHeight = max(CGFloat(config.wrappedValue.bandWidth) * parentHeight, 8)
-            VStack(spacing: 0) {
-                Rectangle()
-                    .fill(bandColor)
-                    .frame(width: parentWidth, height: bandPixelHeight)
-                    .gesture(dragGestureVertical(config: config, parentHeight: parentHeight, fromTop: true))
-                    .onTapGesture { config.wrappedValue.isEnabled.toggle() }
-                Spacer()
-            }
+            let bandPixelHeight = max(CGFloat(config.wrappedValue.bandWidth) * parentHeight, 6)
+            // Horizontal strip on the top inner edge, inset from left/right
+            let bandWidth = parentWidth - (bandInset * 2) - (trackpadCornerRadius * 0.6)
+            RoundedRectangle(cornerRadius: bandCornerRadius)
+                .fill(bandColor)
+                .frame(width: bandWidth, height: bandPixelHeight)
+                .position(x: parentWidth / 2, y: bandInset + bandPixelHeight / 2)
+                .gesture(dragGestureVertical(config: config, parentHeight: parentHeight, fromTop: true))
+                .onTapGesture { config.wrappedValue.isEnabled.toggle() }
+
         case .bottom:
-            let bandPixelHeight = max(CGFloat(config.wrappedValue.bandWidth) * parentHeight, 8)
-            VStack(spacing: 0) {
-                Spacer()
-                Rectangle()
-                    .fill(bandColor)
-                    .frame(width: parentWidth, height: bandPixelHeight)
-                    .gesture(dragGestureVertical(config: config, parentHeight: parentHeight, fromTop: false))
-                    .onTapGesture { config.wrappedValue.isEnabled.toggle() }
-            }
+            let bandPixelHeight = max(CGFloat(config.wrappedValue.bandWidth) * parentHeight, 6)
+            // Horizontal strip on the bottom inner edge, inset from left/right
+            let bandWidth = parentWidth - (bandInset * 2) - (trackpadCornerRadius * 0.6)
+            RoundedRectangle(cornerRadius: bandCornerRadius)
+                .fill(bandColor)
+                .frame(width: bandWidth, height: bandPixelHeight)
+                .position(x: parentWidth / 2, y: parentHeight - bandInset - bandPixelHeight / 2)
+                .gesture(dragGestureVertical(config: config, parentHeight: parentHeight, fromTop: false))
+                .onTapGesture { config.wrappedValue.isEnabled.toggle() }
         }
     }
 
@@ -165,7 +177,6 @@ struct InteractiveTrackpadPreview: View {
     // MARK: - Drag Gestures
 
     /// Horizontal drag gesture for left/right edge band resizing.
-    /// UNVERIFIED: DragGesture translation coordinate system on macOS 14+ within GeometryReader.
     private func dragGestureHorizontal(
         config: Binding<EdgeConfig>,
         parentWidth: CGFloat,
@@ -175,10 +186,8 @@ struct InteractiveTrackpadPreview: View {
             .onChanged { value in
                 let deltaFraction: Double
                 if fromLeft {
-                    // Dragging right increases left band width
                     deltaFraction = Double(value.translation.width / parentWidth)
                 } else {
-                    // Dragging left increases right band width
                     deltaFraction = Double(-value.translation.width / parentWidth)
                 }
                 let newWidth = max(0.01, min(0.15, config.wrappedValue.bandWidth + deltaFraction * 0.1))
@@ -187,7 +196,6 @@ struct InteractiveTrackpadPreview: View {
     }
 
     /// Vertical drag gesture for top/bottom edge band resizing.
-    /// UNVERIFIED: DragGesture translation coordinate system on macOS 14+ within GeometryReader.
     private func dragGestureVertical(
         config: Binding<EdgeConfig>,
         parentHeight: CGFloat,
@@ -197,10 +205,8 @@ struct InteractiveTrackpadPreview: View {
             .onChanged { value in
                 let deltaFraction: Double
                 if fromTop {
-                    // Dragging down increases top band height
                     deltaFraction = Double(value.translation.height / parentHeight)
                 } else {
-                    // Dragging up increases bottom band height
                     deltaFraction = Double(-value.translation.height / parentHeight)
                 }
                 let newWidth = max(0.01, min(0.15, config.wrappedValue.bandWidth + deltaFraction * 0.1))
