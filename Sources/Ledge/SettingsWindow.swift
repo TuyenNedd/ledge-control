@@ -38,6 +38,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate, NSToolbarDelegate {
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.center()
+        window.minSize = NSSize(width: 900, height: 650)
         window.toolbarStyle = .unified
 
         // Install an empty toolbar whose delegate returns no allowed items.
@@ -76,6 +77,8 @@ final class SettingsWindow: NSObject, NSWindowDelegate, NSToolbarDelegate {
                let sidebarItem = splitViewController.splitViewItems.first {
                 sidebarItem.isCollapsed = false
                 sidebarItem.canCollapse = false
+                sidebarItem.minimumThickness = 270
+                sidebarItem.maximumThickness = 270
             }
         }
     }
