@@ -53,9 +53,10 @@ struct SettingsView: View {
                 }
             }
         }
-        // UNVERIFIED: .navigationSplitViewStyle(.balanced) removes the sidebar toggle on macOS 14+.
-        // If it does not, try .toolbar(removing: .sidebarToggle) instead.
+        // Remove the sidebar toggle button. .balanced alone may not remove it on macOS 26;
+        // .toolbar(removing:) is the explicit approach.
         .navigationSplitViewStyle(.balanced)
+        .toolbar(removing: .sidebarToggle)
         .frame(width: 900, height: 650)
     }
 }
@@ -77,6 +78,7 @@ struct GeneralSettingsTab: View {
                 get: { viewModel.isEnabled },
                 set: { viewModel.isEnabled = $0 }
             ))
+                .toggleStyle(.switch)
             Text("Master switch - disables all gesture detection when off.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
@@ -86,6 +88,7 @@ struct GeneralSettingsTab: View {
                 get: { viewModel.launchAtLogin },
                 set: { viewModel.launchAtLogin = $0 }
             ))
+                .toggleStyle(.switch)
                 .padding(.top, 8)
             Text("Start Ledge automatically when you log in.")
                 .font(.caption)
