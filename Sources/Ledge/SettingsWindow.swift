@@ -77,8 +77,8 @@ final class SettingsWindow: NSObject, NSWindowDelegate, NSToolbarDelegate {
                let sidebarItem = splitViewController.splitViewItems.first {
                 sidebarItem.isCollapsed = false
                 sidebarItem.canCollapse = false
-                sidebarItem.minimumThickness = 400
-                sidebarItem.maximumThickness = 400
+                sidebarItem.minimumThickness = 270
+                sidebarItem.maximumThickness = 270
             }
         }
     }
