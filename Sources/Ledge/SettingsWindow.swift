@@ -25,7 +25,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         let contentFrame = NSRect(x: 0, y: 0, width: 900, height: 650)
         window = NSWindow(
             contentRect: contentFrame,
-            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
