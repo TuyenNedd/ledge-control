@@ -10,7 +10,7 @@ import SwiftUI
 /// When Settings opens, the app switches to `.regular` activation policy so it appears in the
 /// Dock and gains standard window behaviors (Cmd+W to close). When the window closes, it
 /// switches back to `.accessory` to hide from the Dock.
-final class SettingsWindow: NSObject, NSWindowDelegate {
+final class SettingsWindow: NSObject, NSWindowDelegate, NSToolbarDelegate {
     private let window: NSWindow
     private let viewModel: SettingsViewModel
 
@@ -38,6 +38,18 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.center()
+        window.toolbarStyle = .unified
+
+        // Install an empty toolbar whose delegate returns no allowed items.
+        // This prevents SwiftUI's NavigationSplitView from injecting the
+        // sidebar toggle button.
+        let toolbar = NSToolbar(identifier: "SettingsToolbar")
+        toolbar.delegate = self
+        toolbar.showsBaselineSeparator = false
+        toolbar.allowsUserCustomization = false
+        toolbar.autosavesConfiguration = false
+        window.toolbar = toolbar
+
         window.contentViewController = hostingController
     }
 
@@ -55,6 +67,39 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
+
+        // Lock the sidebar open so macOS has no reason to show the toggle button.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let contentView = self.window.contentView else { return }
+            if let splitView = self.findSplitView(in: contentView),
+               let splitViewController = splitView.delegate as? NSSplitViewController,
+               let sidebarItem = splitViewController.splitViewItems.first {
+                sidebarItem.isCollapsed = false
+                sidebarItem.canCollapse = false
+            }
+        }
+    }
+
+    private func findSplitView(in view: NSView) -> NSSplitView? {
+        if let splitView = view as? NSSplitView {
+            return splitView
+        }
+        for subview in view.subviews {
+            if let found = findSplitView(in: subview) {
+                return found
+            }
+        }
+        return nil
+    }
+
+    // MARK: - NSToolbarDelegate
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        []
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        []
     }
 
     /// Creates a minimal main menu bar with File > Close (⌘W) so standard keyboard shortcuts

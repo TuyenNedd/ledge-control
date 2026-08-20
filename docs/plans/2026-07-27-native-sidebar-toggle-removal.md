@@ -28,13 +28,13 @@
 **Files:**
 - Modify: `Sources/Ledge/SettingsWindow.swift:14-90`
 
-**Step 1:** Add observer storage for `NSToolbar.didAddItemNotification`.
+**Step 1:** Add observer storage, a presentation generation, and cleanup-coalescing state for `NSToolbar.willAddItemNotification`.
 
-**Step 2:** After `makeKeyAndOrderFront`, schedule a main-run-loop cleanup that discovers the window toolbar, installs a scoped observer if needed, and removes every item whose identifier equals `.toggleSidebar`.
+**Step 2:** Before `makeKeyAndOrderFront`, install a presentation-scoped observer for toolbar additions. After presentation, schedule a main-run-loop cleanup that removes every realized item whose identifier equals `.toggleSidebar`.
 
-**Step 3:** If the observer sees an item added to the scoped toolbar, schedule the same cleanup on the next main-run-loop turn rather than mutating the toolbar inside its notification.
+**Step 3:** If the observer sees an item being added to the Settings toolbar, coalesce and schedule cleanup on the next main-run-loop turn rather than mutating the toolbar inside its pre-add notification.
 
-**Step 4:** Remove the observer in `windowWillClose` and before replacing it with an observer for a different toolbar.
+**Step 4:** Invalidate the presentation generation and remove the observer in `windowWillClose` so queued work cannot recreate observation after close.
 
 ### Task 3: Verify and deliver
 

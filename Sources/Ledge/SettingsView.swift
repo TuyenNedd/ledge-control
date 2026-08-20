@@ -3,10 +3,9 @@ import ServiceManagement
 import LedgeCore
 import UniformTypeIdentifiers
 
-/// The root SwiftUI view for the Settings window, using a fixed, full-height sidebar.
+/// The root SwiftUI view for the Settings window, using the native full-height sidebar.
 ///
-/// A fixed layout intentionally avoids `NavigationSplitView`, whose collapsible sidebar adds
-/// a system Show/Hide Sidebar toolbar button on some macOS versions.
+/// The system sidebar toggle is removed by `SettingsWindow` after SwiftUI realizes its toolbar.
 struct SettingsView: View {
     var viewModel: SettingsViewModel
 
@@ -20,7 +19,7 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
+        NavigationSplitView(columnVisibility: .constant(.all), sidebar: {
             List(selection: $selectedTab) {
                 Label("General", systemImage: "gearshape")
                     .tag(SettingsTab.general)
@@ -38,10 +37,9 @@ struct SettingsView: View {
                 }
             }
             .listStyle(.sidebar)
-            .frame(width: 200)
-
-            Divider()
-
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 220)
+            .toolbar(removing: .sidebarToggle)
+        }, detail: {
             ScrollView {
                 switch selectedTab {
                 case .general:
@@ -54,8 +52,8 @@ struct SettingsView: View {
                     AboutTab()
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+        })
+        .navigationSplitViewStyle(.balanced)
         .frame(width: 900, height: 650)
     }
 }

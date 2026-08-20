@@ -16,7 +16,7 @@ Preserve the native macOS `NavigationSplitView` sidebar appearance—including f
 
 Restore the prior native two-column `NavigationSplitView` in `SettingsView`, including its sidebar `List`, balanced split-view style, and native column sizing. Remove the ineffective SwiftUI `.toolbar(removing: .sidebarToggle)` modifier.
 
-After `SettingsWindow` presents the hosting controller, AppKit will inspect the realized `NSToolbar` and remove only items whose public identifier is `NSToolbarItem.Identifier.toggleSidebar`. Cleanup runs asynchronously after presentation because SwiftUI creates and reconciles the toolbar lazily. It also observes toolbar-item additions for the current toolbar so a later SwiftUI reconciliation cannot permanently reinsert the sidebar toggle. Observation is scoped to that toolbar and is removed when the window closes.
+After `SettingsWindow` presents the hosting controller, AppKit inspects the realized `NSToolbar` and removes only items whose public identifier is `NSToolbarItem.Identifier.toggleSidebar`. A presentation-scoped `NSToolbar.willAddItemNotification` observer is installed before the window is shown because SwiftUI creates and reconciles the toolbar lazily. Its callback schedules cleanup on the next main run-loop, after the pending insertion completes. The observer is removed and queued work invalidated when the window closes.
 
 ## Alternatives considered
 
@@ -27,7 +27,7 @@ After `SettingsWindow` presents the hosting controller, AppKit will inspect the 
 
 ## Lifecycle and safety
 
-`SettingsWindow` is retained and reopened rather than recreated. Each `show()` call schedules toolbar cleanup after `makeKeyAndOrderFront`. The cleanup uses the public item identifier rather than localized labels or private view traversal. A scoped `NSToolbar.didAddItemNotification` observer handles reinsertion; cleanup dispatches to the next run-loop turn to avoid mutating the toolbar during its own notification callback.
+`SettingsWindow` is retained and reopened rather than recreated. Before each presentation it installs a lifecycle-scoped `NSToolbar.willAddItemNotification` observer, then schedules toolbar cleanup after `makeKeyAndOrderFront`. The cleanup uses the public item identifier rather than localized labels or private view traversal. The notification callback filters to the Settings toolbar and dispatches cleanup to the next run-loop turn so it does not mutate the toolbar during its pre-add notification. A presentation generation token invalidates queued cleanup when the window closes.
 
 ## Verification
 
