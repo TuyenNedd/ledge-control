@@ -37,7 +37,7 @@ struct SettingsView: View {
                 }
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 220)
+            .navigationSplitViewColumnWidth(min: 220, ideal: 270, max: 270)
             .toolbar(removing: .sidebarToggle)
         }, detail: {
             ScrollView {
