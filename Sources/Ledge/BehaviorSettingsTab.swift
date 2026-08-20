@@ -14,18 +14,18 @@ struct BehaviorSettingsTab: View {
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
 
-            Toggle("Freeze Cursor During Gesture", isOn: $viewModel.cursorFreezeEnabled)
-            Text("Keep the mouse pointer still while sliding the edge.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .padding(.leading, 20)
+            SettingsToggleRow(
+                title: "Freeze Cursor During Gesture",
+                description: "Keep the mouse pointer still while sliding the edge.",
+                isOn: $viewModel.cursorFreezeEnabled
+            )
 
-            Toggle("Bottom Quarter Only", isOn: $viewModel.bottomQuarterOnly)
-                .padding(.top, 8)
-            Text("Only detect gestures in the bottom quarter of the trackpad.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .padding(.leading, 20)
+            SettingsToggleRow(
+                title: "Bottom Quarter Only",
+                description: "Only detect gestures in the bottom quarter of the trackpad.",
+                isOn: $viewModel.bottomQuarterOnly
+            )
+            .padding(.top, 8)
 
             Picker("Modifier Key Required", selection: $viewModel.modifierKeyRequired) {
                 ForEach(ModifierKeyMode.allCases, id: \.self) { mode in

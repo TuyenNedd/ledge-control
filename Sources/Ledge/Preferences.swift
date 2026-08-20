@@ -4,21 +4,41 @@ import LedgeCore
 /// Everything the user can change, persisted in `UserDefaults`.
 ///
 /// This type stores and retrieves; it decides nothing. Every default value it seeds comes from
-/// `GestureSettings()` — the tested type that owns what a sensible value is — so there is exactly
+/// `GestureSettings()` -- the tested type that owns what a sensible value is -- so there is exactly
 /// one place in the codebase where a default is written down, and it is the place that is under
 /// test. The only defaults declared here are the ones with no `GestureSettings` counterpart.
 ///
-/// The numeric tunables are persisted even though no menu item edits them. That is deliberate:
-/// `docs/DESIGN.md` expects `edgeBandWidth`, `activationDistance` and `typingLockout` to need
-/// retuning after real use, and having them in the defaults domain means that can be done with
-/// `defaults write xyz.tuyennedd.ledge edgeBandWidth 0.08` and a relaunch, instead of a rebuild.
+/// Per-edge configuration (action, bandWidth, isEnabled) is stored as individual keys per edge,
+/// replacing the old single `edgeBandWidth` and `swapSides` keys. Migration from the old format
+/// happens automatically on first read if old keys exist and new keys do not.
 final class Preferences {
     private let defaults: UserDefaults
 
     /// Deliberately unprefixed, so `defaults read xyz.tuyennedd.ledge` is readable and
     /// `defaults write` is typeable. The defaults domain is already per-application.
     private enum Key {
+        // Legacy keys (kept for migration detection, no longer written)
         static let edgeBandWidth = "edgeBandWidth"
+        static let swapSides = "swapSides"
+
+        // Per-edge configuration keys
+        static let leftEdgeAction = "leftEdgeAction"
+        static let leftEdgeBandWidth = "leftEdgeBandWidth"
+        static let leftEdgeEnabled = "leftEdgeEnabled"
+
+        static let rightEdgeAction = "rightEdgeAction"
+        static let rightEdgeBandWidth = "rightEdgeBandWidth"
+        static let rightEdgeEnabled = "rightEdgeEnabled"
+
+        static let topEdgeAction = "topEdgeAction"
+        static let topEdgeBandWidth = "topEdgeBandWidth"
+        static let topEdgeEnabled = "topEdgeEnabled"
+
+        static let bottomEdgeAction = "bottomEdgeAction"
+        static let bottomEdgeBandWidth = "bottomEdgeBandWidth"
+        static let bottomEdgeEnabled = "bottomEdgeEnabled"
+
+        // Shared gesture settings
         static let stepDistance = "stepDistance"
         static let activationDistance = "activationDistance"
         static let maxDriftOutsideBand = "maxDriftOutsideBand"
@@ -26,28 +46,42 @@ final class Preferences {
         static let typingLockout = "typingLockout"
         static let gestureTimeout = "gestureTimeout"
         static let fineControl = "fineControl"
-        static let swapSides = "swapSides"
 
+        // Adapter-layer settings
         static let cursorFreezeEnabled = "cursorFreezeEnabled"
         static let isEnabled = "isEnabled"
         static let useCoreAudioVolume = "useCoreAudioVolume"
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
         static let modifierKeyRequired = "modifierKeyRequired"
         static let excludedApps = "excludedApps"
+
+        /// Sentinel key: when present, per-edge migration has been performed.
+        static let perEdgeMigrated = "perEdgeMigrated"
     }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
-        // Registering is not a nicety. `UserDefaults.bool(forKey:)` answers `false` for a key
-        // that was never written, and `double(forKey:)` answers `0` — so on a first launch,
-        // without this, `fineControl` would read false (turning off the entire reason the app
-        // exists), `isEnabled` would read false (the app would do nothing at all), and every
-        // threshold would read zero (`edgeBandWidth` of 0 classifies no edge, so no gesture could
-        // ever arm). All four failures are silent.
         let seed = GestureSettings()
         defaults.register(defaults: [
-            Key.edgeBandWidth: seed.edgeBandWidth,
+            // Per-edge defaults
+            Key.leftEdgeAction: seed.leftEdge.action.rawValue,
+            Key.leftEdgeBandWidth: seed.leftEdge.bandWidth,
+            Key.leftEdgeEnabled: seed.leftEdge.isEnabled,
+
+            Key.rightEdgeAction: seed.rightEdge.action.rawValue,
+            Key.rightEdgeBandWidth: seed.rightEdge.bandWidth,
+            Key.rightEdgeEnabled: seed.rightEdge.isEnabled,
+
+            Key.topEdgeAction: seed.topEdge.action.rawValue,
+            Key.topEdgeBandWidth: seed.topEdge.bandWidth,
+            Key.topEdgeEnabled: seed.topEdge.isEnabled,
+
+            Key.bottomEdgeAction: seed.bottomEdge.action.rawValue,
+            Key.bottomEdgeBandWidth: seed.bottomEdge.bandWidth,
+            Key.bottomEdgeEnabled: seed.bottomEdge.isEnabled,
+
+            // Shared gesture settings
             Key.stepDistance: seed.stepDistance,
             Key.activationDistance: seed.activationDistance,
             Key.maxDriftOutsideBand: seed.maxDriftOutsideBand,
@@ -55,17 +89,87 @@ final class Preferences {
             Key.typingLockout: seed.typingLockout,
             Key.gestureTimeout: seed.gestureTimeout,
             Key.fineControl: seed.fineControl,
-            Key.swapSides: seed.swapSides,
 
-            // No `GestureSettings` counterpart: these govern the adapter layer, not the gesture
-            // logic. Cursor freeze is on because it is the behaviour the app is for; `isEnabled`
-            // is on because an app that starts switched off looks broken; the CoreAudio backend is
-            // off because it produces no HUD (see `VolumeController`).
+            // Adapter-layer defaults (no GestureSettings counterpart)
             Key.cursorFreezeEnabled: true,
             Key.isEnabled: true,
             Key.useCoreAudioVolume: false,
         ])
+
+        // Migrate from old single-edgeBandWidth / swapSides format if needed.
+        migrateIfNeeded()
     }
+
+    // MARK: - Migration
+
+    /// If old keys (`edgeBandWidth`, `swapSides`) exist and per-edge keys have not been written,
+    /// map old values to the new per-edge config.
+    ///
+    /// Old format: single `edgeBandWidth` for both edges, `swapSides` swaps volume/brightness.
+    /// New format: each edge has its own action, bandWidth, and isEnabled.
+    private func migrateIfNeeded() {
+        // Already migrated: nothing to do.
+        guard !defaults.bool(forKey: Key.perEdgeMigrated) else { return }
+
+        // Only migrate if old keys were explicitly set (not just registered defaults).
+        // `object(forKey:)` returns nil for unset keys, unlike `double(forKey:)` which returns 0.
+        let hasOldBandWidth = defaults.object(forKey: Key.edgeBandWidth) != nil
+        let hasOldSwapSides = defaults.object(forKey: Key.swapSides) != nil
+
+        guard hasOldBandWidth || hasOldSwapSides else {
+            // Fresh install: mark as migrated so we never check again.
+            defaults.set(true, forKey: Key.perEdgeMigrated)
+            return
+        }
+
+        let oldBandWidth = defaults.double(forKey: Key.edgeBandWidth)
+        let oldSwapSides = defaults.bool(forKey: Key.swapSides)
+
+        // Old convention: left = brightness, right = volume (swapSides flips them).
+        let leftAction: EdgeAction = oldSwapSides ? .volume : .brightness
+        let rightAction: EdgeAction = oldSwapSides ? .brightness : .volume
+
+        // Write per-edge config from old values.
+        defaults.set(leftAction.rawValue, forKey: Key.leftEdgeAction)
+        defaults.set(oldBandWidth, forKey: Key.leftEdgeBandWidth)
+        defaults.set(true, forKey: Key.leftEdgeEnabled)
+
+        defaults.set(rightAction.rawValue, forKey: Key.rightEdgeAction)
+        defaults.set(oldBandWidth, forKey: Key.rightEdgeBandWidth)
+        defaults.set(true, forKey: Key.rightEdgeEnabled)
+
+        // Top and bottom were not supported before: leave them at defaults (disabled).
+        defaults.set(EdgeAction.none.rawValue, forKey: Key.topEdgeAction)
+        defaults.set(oldBandWidth, forKey: Key.topEdgeBandWidth)
+        defaults.set(false, forKey: Key.topEdgeEnabled)
+
+        defaults.set(EdgeAction.none.rawValue, forKey: Key.bottomEdgeAction)
+        defaults.set(oldBandWidth, forKey: Key.bottomEdgeBandWidth)
+        defaults.set(false, forKey: Key.bottomEdgeEnabled)
+
+        // Mark migration complete and remove old keys.
+        defaults.set(true, forKey: Key.perEdgeMigrated)
+        defaults.removeObject(forKey: Key.edgeBandWidth)
+        defaults.removeObject(forKey: Key.swapSides)
+    }
+
+    // MARK: - Per-Edge Config Helpers
+
+    private func readEdgeConfig(actionKey: String, bandWidthKey: String, enabledKey: String) -> EdgeConfig {
+        let actionRaw = defaults.string(forKey: actionKey) ?? EdgeAction.none.rawValue
+        let action = EdgeAction(rawValue: actionRaw) ?? .none
+        let bandWidth = defaults.double(forKey: bandWidthKey)
+        let isEnabled = defaults.bool(forKey: enabledKey)
+        return EdgeConfig(action: action, bandWidth: bandWidth, isEnabled: isEnabled)
+    }
+
+    private func writeEdgeConfig(_ config: EdgeConfig, actionKey: String, bandWidthKey: String, enabledKey: String) {
+        defaults.set(config.action.rawValue, forKey: actionKey)
+        defaults.set(config.bandWidth, forKey: bandWidthKey)
+        defaults.set(config.isEnabled, forKey: enabledKey)
+    }
+
+    // MARK: - Gesture Settings
 
     /// The tunables, assembled from the defaults domain.
     ///
@@ -75,7 +179,30 @@ final class Preferences {
     var gestureSettings: GestureSettings {
         get {
             var settings = GestureSettings()
-            settings.edgeBandWidth = defaults.double(forKey: Key.edgeBandWidth)
+
+            // Per-edge configuration
+            settings.leftEdge = readEdgeConfig(
+                actionKey: Key.leftEdgeAction,
+                bandWidthKey: Key.leftEdgeBandWidth,
+                enabledKey: Key.leftEdgeEnabled
+            )
+            settings.rightEdge = readEdgeConfig(
+                actionKey: Key.rightEdgeAction,
+                bandWidthKey: Key.rightEdgeBandWidth,
+                enabledKey: Key.rightEdgeEnabled
+            )
+            settings.topEdge = readEdgeConfig(
+                actionKey: Key.topEdgeAction,
+                bandWidthKey: Key.topEdgeBandWidth,
+                enabledKey: Key.topEdgeEnabled
+            )
+            settings.bottomEdge = readEdgeConfig(
+                actionKey: Key.bottomEdgeAction,
+                bandWidthKey: Key.bottomEdgeBandWidth,
+                enabledKey: Key.bottomEdgeEnabled
+            )
+
+            // Shared gesture settings
             settings.stepDistance = defaults.double(forKey: Key.stepDistance)
             settings.activationDistance = defaults.double(forKey: Key.activationDistance)
             settings.maxDriftOutsideBand = defaults.double(forKey: Key.maxDriftOutsideBand)
@@ -83,12 +210,33 @@ final class Preferences {
             settings.typingLockout = defaults.double(forKey: Key.typingLockout)
             settings.gestureTimeout = defaults.double(forKey: Key.gestureTimeout)
             settings.fineControl = defaults.bool(forKey: Key.fineControl)
-            settings.swapSides = defaults.bool(forKey: Key.swapSides)
             settings.modifierKeyRequired = modifierKeyRequired
             return settings
         }
         set {
-            defaults.set(newValue.edgeBandWidth, forKey: Key.edgeBandWidth)
+            // Per-edge configuration
+            writeEdgeConfig(newValue.leftEdge,
+                actionKey: Key.leftEdgeAction,
+                bandWidthKey: Key.leftEdgeBandWidth,
+                enabledKey: Key.leftEdgeEnabled
+            )
+            writeEdgeConfig(newValue.rightEdge,
+                actionKey: Key.rightEdgeAction,
+                bandWidthKey: Key.rightEdgeBandWidth,
+                enabledKey: Key.rightEdgeEnabled
+            )
+            writeEdgeConfig(newValue.topEdge,
+                actionKey: Key.topEdgeAction,
+                bandWidthKey: Key.topEdgeBandWidth,
+                enabledKey: Key.topEdgeEnabled
+            )
+            writeEdgeConfig(newValue.bottomEdge,
+                actionKey: Key.bottomEdgeAction,
+                bandWidthKey: Key.bottomEdgeBandWidth,
+                enabledKey: Key.bottomEdgeEnabled
+            )
+
+            // Shared gesture settings
             defaults.set(newValue.stepDistance, forKey: Key.stepDistance)
             defaults.set(newValue.activationDistance, forKey: Key.activationDistance)
             defaults.set(newValue.maxDriftOutsideBand, forKey: Key.maxDriftOutsideBand)
@@ -96,10 +244,11 @@ final class Preferences {
             defaults.set(newValue.typingLockout, forKey: Key.typingLockout)
             defaults.set(newValue.gestureTimeout, forKey: Key.gestureTimeout)
             defaults.set(newValue.fineControl, forKey: Key.fineControl)
-            defaults.set(newValue.swapSides, forKey: Key.swapSides)
             modifierKeyRequired = newValue.modifierKeyRequired
         }
     }
+
+    // MARK: - Adapter-Layer Settings
 
     /// Whether pointer movement is swallowed while a gesture owns a control, so a slide along the
     /// edge does not also drag the cursor up the screen.
@@ -114,7 +263,7 @@ final class Preferences {
         set { defaults.set(newValue, forKey: Key.isEnabled) }
     }
 
-    /// Trade the system HUD for continuous volume control. Off by default — see
+    /// Trade the system HUD for continuous volume control. Off by default -- see
     /// `CoreAudioVolumeController`.
     var useCoreAudioVolume: Bool {
         get { defaults.bool(forKey: Key.useCoreAudioVolume) }

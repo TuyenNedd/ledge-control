@@ -5,145 +5,143 @@
 /// file, and every default should be defensible from its doc comment alone.
 ///
 /// The properties are `var`, unlike the immutable value types elsewhere in `LedgeCore`,
-/// because the menu bar flips `fineControl`, `swapSides` and `bottomQuarterOnly` at runtime.
-/// It remains a value type, so a change made in one place cannot reach a copy held elsewhere.
+/// because the menu bar flips settings at runtime. It remains a value type, so a change made
+/// in one place cannot reach a copy held elsewhere.
 public struct GestureSettings: Sendable, Equatable {
-    /// How far in from a vertical edge a touch may start and still count, as a **fraction of
-    /// trackpad width**.
-    ///
-    /// Default `0.025` ≈ 4 mm on a MacBook trackpad — the finger must be right at the physical
-    /// edge to trigger. This virtually eliminates false positives from normal trackpad use, at
-    /// the cost of requiring deliberate placement. Widening it makes the gesture easier to hit
-    /// but risks triggering during scrolls; narrowing further becomes unreachable.
-    public var edgeBandWidth: Double = 0.025
+    /// Configuration for the left edge. Default: brightness, 0.025 band, enabled.
+    public var leftEdge: EdgeConfig = EdgeConfig(action: .brightness, bandWidth: 0.025, isEnabled: true)
 
-    /// Vertical travel required per step, as a **fraction of trackpad height**.
+    /// Configuration for the right edge. Default: volume, 0.025 band, enabled.
+    public var rightEdge: EdgeConfig = EdgeConfig(action: .volume, bandWidth: 0.025, isEnabled: true)
+
+    /// Configuration for the top edge. Default: none, 0.025 band, disabled.
+    public var topEdge: EdgeConfig = EdgeConfig(action: .none, bandWidth: 0.025, isEnabled: false)
+
+    /// Configuration for the bottom edge. Default: none, 0.025 band, disabled.
+    public var bottomEdge: EdgeConfig = EdgeConfig(action: .none, bandWidth: 0.025, isEnabled: false)
+
+    /// Vertical travel required per step, as a **fraction of trackpad height** (for vertical
+    /// edges) or trackpad width (for horizontal edges).
     ///
     /// Default `0.016` approximates 1/64 of the height, matching the 64 sub-steps that fine
-    /// volume mode provides, so one full-height slide spans roughly the entire range once. It
-    /// is an approximation, not a division: `1/0.016` is 62.5 steps, and 15.625 with fine
-    /// control off, so a full-height slide falls a little short of the range rather than
-    /// covering it exactly. A round 0.016 was chosen over an exact `1.0/64` because the number
-    /// is meant to be hand-tuned after real use, and a slide that lands slightly short is
-    /// unnoticeable next to being unable to reach the end at all.
-    ///
-    /// Shrinking it makes the control twitchy and overshoot; growing it means the range no
-    /// longer fits in a single comfortable slide.
+    /// volume mode provides.
     public var stepDistance: Double = 0.016
 
-    /// Vertical travel required before a gesture engages at all, as a **fraction of trackpad
-    /// height**.
+    /// Travel required before a gesture engages at all, as a **fraction of the relevant
+    /// trackpad dimension**.
     ///
     /// A dead zone: default `0.02` has to be larger than the wobble of a finger resting at
     /// the edge, or the app fires when the user is holding still, but small enough that the
     /// gesture still feels immediate rather than needing a wind-up.
-    ///
-    /// Note that `0.02` deliberately **exceeds** `effectiveStepDistance` (0.016 with fine
-    /// control on). The step anchor is set to where the touch *started*, not to where it
-    /// engaged, so the travel spent clearing this dead zone still counts toward steps: at the
-    /// instant a gesture is recognised at least one step is already due and fires in the same
-    /// frame. That is the intent — recognition should produce feedback immediately, rather than
-    /// leaving the gesture dead for another step's worth of travel after the user has already
-    /// committed to it. Total steps over a slide are `floor(travelFromStart / step)` either
-    /// way, so this trades nothing away.
-    ///
-    /// Anyone lowering this below `effectiveStepDistance` should know they are giving that up:
-    /// the gesture will then engage silently and wait for more travel before the first step.
     public var activationDistance: Double = 0.02
 
     /// How far an already-engaged finger may stray beyond the band before the gesture is
-    /// abandoned, as a **fraction of trackpad width**.
+    /// abandoned, as a **fraction of the relevant trackpad dimension**.
     ///
-    /// Default `0.02` keeps drift tolerance narrower than the edge band, so "started at the
-    /// edge" remains the defining characteristic of the gesture. Too much tolerance and a finger
-    /// that has genuinely moved on to pointing keeps driving the control.
+    /// Default `0.02` keeps drift tolerance narrower than the edge band.
     public var maxDriftOutsideBand: Double = 0.02
 
     /// Whether a gesture may only start in the bottom quarter of the trackpad.
     ///
-    /// Default `false`. This is the strongest false-positive defence available, and also the
-    /// most restrictive to use, so it ships off: it exists to be switched on from the menu if
-    /// false positives turn out to persist in practice, rather than being imposed before
-    /// there is evidence they do.
+    /// Default `false`. Only applies to vertical edges (left/right).
     public var bottomQuarterOnly: Bool = false
 
     /// How long after a keystroke gestures stay suppressed, in **seconds**.
     ///
-    /// Default `0.6` s is chosen to span the pause between keystrokes, so a palm resting at
-    /// the edge stays ignored *through* a sentence rather than being re-enabled in every gap
-    /// between two keys. The cost is that a deliberate gesture right after typing is dropped.
+    /// Default `0.6` s spans the pause between keystrokes.
     public var typingLockout: Double = 0.6
 
     /// How large a gap between touch frames abandons the gesture in progress, in **seconds**.
     ///
-    /// Default `0.25` s. Frames stop arriving when a finger stops moving, and a gesture that
-    /// resumed after a long pause would attribute travel to an intent the user no longer has.
-    /// Shorter than the time a user would spend deciding, longer than any hardware hiccup.
+    /// Default `0.25` s.
     public var gestureTimeout: Double = 0.25
 
     /// Whether steps drive the OS's fine-grained sub-steps rather than its whole steps.
     ///
-    /// Default `true`: quarter-step control is the entire reason the app exists. Off, the app
-    /// still works, it just behaves like the hardware keys.
+    /// Default `true`: quarter-step control is the entire reason the app exists.
     public var fineControl: Bool = true
-
-    /// Whether the edges swap which control they drive.
-    ///
-    /// Default `false`, meaning volume on the right, where a right hand already rests, and
-    /// brightness on the left. Left-handed users, or anyone who disagrees, flip this.
-    public var swapSides: Bool = false
 
     /// Which modifier key must be held for gestures to activate.
     ///
-    /// Default `.none` means no modifier is required and gestures work unconditionally. Any other
-    /// value makes the engine suppress arming (the same way the typing lockout does) unless the
-    /// adapter reports the modifier as currently held. Releasing the modifier mid-gesture ends it.
+    /// Default `.none` means no modifier is required.
     public var modifierKeyRequired: ModifierKeyMode = .none
 
     public init() {}
 
-    /// Which edge, if any, a horizontal position falls in.
+    /// Get the `EdgeConfig` for a given edge.
+    public func edgeConfig(for edge: TrackpadEdge) -> EdgeConfig {
+        switch edge {
+        case .left: return leftEdge
+        case .right: return rightEdge
+        case .top: return topEdge
+        case .bottom: return bottomEdge
+        }
+    }
+
+    /// Which edge, if any, a position falls in, considering all four edges and their enabled state.
     ///
-    /// Each band is **half-open**: it includes its outer limit and excludes its inner
-    /// boundary, so a band spans exactly `edgeBandWidth` of the width, and an `edgeBandWidth`
-    /// of `0` classifies nothing at all. Were the inner boundary inclusive instead, a
-    /// zero-width band would still claim `x == 0`, and narrowing the setting could never
-    /// switch edge detection off.
+    /// Priority: vertical edges (left/right) win over horizontal edges (top/bottom) when a
+    /// position is in both bands (corner case). A disabled edge is never returned.
     ///
-    /// If `edgeBandWidth` is ever set above `0.5` the two bands overlap; a position inside
-    /// both resolves to the **nearer** edge, with an exact tie going to the left. Nearest-edge
-    /// keeps widening the band monotone — it only ever adds positions to a band, never moves
-    /// one from a band to nowhere — and it keeps the answer deterministic, so a finger held
-    /// still cannot flicker between two controls.
+    /// For left/right edges, the band is measured as a fraction of trackpad width (x-axis).
+    /// For top/bottom edges, the band is measured as a fraction of trackpad height (y-axis).
     ///
-    /// `x` is not range-checked, matching `NormalizedPoint`: an out-of-range value means the
-    /// adapter is wrong, and it is left to classify as the edge it is beyond rather than being
-    /// quietly absorbed here.
-    public func edge(forX x: Double) -> TrackpadEdge? {
-        let isInLeftBand = x < edgeBandWidth
-        let isInRightBand = x > 1 - edgeBandWidth
+    /// If two edges on the same axis both claim the position (e.g. overlapping bands), the
+    /// nearer edge wins, with ties going to left (for horizontal) or bottom (for vertical).
+    public func edge(forPosition position: NormalizedPoint) -> TrackpadEdge? {
+        // Check vertical edges first (they have priority)
+        let verticalEdge = classifyVertical(x: position.x)
+        if let edge = verticalEdge, edgeConfig(for: edge).isEnabled {
+            return edge
+        }
+
+        // Then horizontal edges
+        let horizontalEdge = classifyHorizontal(y: position.y)
+        if let edge = horizontalEdge, edgeConfig(for: edge).isEnabled {
+            return edge
+        }
+
+        return nil
+    }
+
+    /// Classify x-position into left/right edge, or nil.
+    private func classifyVertical(x: Double) -> TrackpadEdge? {
+        let leftBand = leftEdge.bandWidth
+        let rightBand = rightEdge.bandWidth
+
+        let isInLeftBand = x < leftBand
+        let isInRightBand = x > 1 - rightBand
         switch (isInLeftBand, isInRightBand) {
         case (true, false): return .left
         case (false, true): return .right
-        case (true, true): return x <= 1 - x ? .left : .right
+        case (true, true):
+            // Overlapping bands: resolve to nearer edge, ties go to left
+            return x <= 1 - x ? .left : .right
         case (false, false): return nil
         }
     }
 
-    /// Which control an edge drives, honouring `swapSides`.
-    public func control(for edge: TrackpadEdge) -> Control {
-        switch edge {
-        case .left: return swapSides ? .volume : .brightness
-        case .right: return swapSides ? .brightness : .volume
+    /// Classify y-position into top/bottom edge, or nil.
+    private func classifyHorizontal(y: Double) -> TrackpadEdge? {
+        let bottomBand = bottomEdge.bandWidth
+        let topBand = topEdge.bandWidth
+
+        let isInBottomBand = y < bottomBand
+        let isInTopBand = y > 1 - topBand
+        switch (isInBottomBand, isInTopBand) {
+        case (true, false): return .bottom
+        case (false, true): return .top
+        case (true, true):
+            // Overlapping bands: resolve to nearer edge, ties go to bottom
+            return y <= 1 - y ? .bottom : .top
+        case (false, false): return nil
         }
     }
 
-    /// The travel required per step given `fineControl`, as a **fraction of trackpad height**.
+    /// The travel required per step given `fineControl`.
     ///
-    /// With fine control off, one step moves a whole OS step instead of a sub-step — 16 of
-    /// them across the range rather than 64 — so the distance is multiplied by 4 to keep a
-    /// full-height slide spanning the whole range either way. Without the multiplier, coarse
-    /// mode would cross the entire range in a quarter of a slide.
+    /// With fine control off, one step moves a whole OS step instead of a sub-step, so the
+    /// distance is multiplied by 4.
     public var effectiveStepDistance: Double {
         fineControl ? stepDistance : stepDistance * 4
     }

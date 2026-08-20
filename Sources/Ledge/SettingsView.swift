@@ -3,7 +3,9 @@ import ServiceManagement
 import LedgeCore
 import UniformTypeIdentifiers
 
-/// The root SwiftUI view for the Settings window, using a sidebar with grouped sections.
+/// The root SwiftUI view for the Settings window, using the native full-height sidebar.
+///
+/// The system sidebar toggle is removed by `SettingsWindow` after SwiftUI realizes its toolbar.
 struct SettingsView: View {
     var viewModel: SettingsViewModel
 
@@ -17,7 +19,7 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: .constant(.all), sidebar: {
             List(selection: $selectedTab) {
                 Label("General", systemImage: "gearshape")
                     .tag(SettingsTab.general)
@@ -35,8 +37,9 @@ struct SettingsView: View {
                 }
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 220)
-        } detail: {
+            .frame(minWidth: 270, maxWidth: 270)
+            .toolbar(removing: .sidebarToggle)
+        }, detail: {
             ScrollView {
                 switch selectedTab {
                 case .general:
@@ -49,8 +52,9 @@ struct SettingsView: View {
                     AboutTab()
                 }
             }
-        }
-        .frame(width: 780, height: 580)
+        })
+        .navigationSplitViewStyle(.balanced)
+        .frame(width: 900, height: 650)
     }
 }
 
@@ -67,24 +71,24 @@ struct GeneralSettingsTab: View {
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
 
-            Toggle("Enable Ledge", isOn: Binding(
-                get: { viewModel.isEnabled },
-                set: { viewModel.isEnabled = $0 }
-            ))
-            Text("Master switch - disables all gesture detection when off.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .padding(.leading, 20)
+            SettingsToggleRow(
+                title: "Enable Ledge",
+                description: "Master switch - disables all gesture detection when off.",
+                isOn: Binding(
+                    get: { viewModel.isEnabled },
+                    set: { viewModel.isEnabled = $0 }
+                )
+            )
 
-            Toggle("Launch at Login", isOn: Binding(
-                get: { viewModel.launchAtLogin },
-                set: { viewModel.launchAtLogin = $0 }
-            ))
-                .padding(.top, 8)
-            Text("Start Ledge automatically when you log in.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .padding(.leading, 20)
+            SettingsToggleRow(
+                title: "Launch at Login",
+                description: "Start Ledge automatically when you log in.",
+                isOn: Binding(
+                    get: { viewModel.launchAtLogin },
+                    set: { viewModel.launchAtLogin = $0 }
+                )
+            )
+            .padding(.top, 8)
 
             // MARK: - Settings Data section
             Text("SETTINGS DATA")
@@ -116,10 +120,12 @@ struct GeneralSettingsTab: View {
 /// Uses `@Observable` (macOS 14+) so that views can read properties directly without
 /// explicit `@Published` wrappers.
 ///
-/// Slider values write to `Preferences` immediately (so the trackpad preview updates in
-/// real-time), but the heavier `applyPreferences()` call is deferred to when the slider
-/// drag ends via `applyIfNeeded()`. Toggle changes apply immediately since they are
-/// discrete events.
+/// Per-edge `EdgeConfig` properties replace the old `edgeBandWidth` and `swapSides`.
+/// Each edge config change writes to preferences immediately and propagates through
+/// the interactive trackpad preview in real time.
+///
+/// All Toggle controls render as switches on macOS 14+ by default (the system style for
+/// Toggle on macOS 14+ is a switch when used outside of a Form).
 // UNVERIFIED: @Observable macro on a class with explicit didSet calling side effects.
 @Observable
 final class SettingsViewModel {
@@ -130,21 +136,31 @@ final class SettingsViewModel {
     /// but does not call `applyPreferences()`.
     var isEditingSlider: Bool = false
 
-    // MARK: - Gesture settings
+    // MARK: - Per-Edge Configuration
 
-    var edgeBandWidth: Double {
+    var leftEdge: EdgeConfig {
         didSet { writeGestureSettings(); applyIfNotEditing() }
     }
+
+    var rightEdge: EdgeConfig {
+        didSet { writeGestureSettings(); applyIfNotEditing() }
+    }
+
+    var topEdge: EdgeConfig {
+        didSet { writeGestureSettings(); applyIfNotEditing() }
+    }
+
+    var bottomEdge: EdgeConfig {
+        didSet { writeGestureSettings(); applyIfNotEditing() }
+    }
+
+    // MARK: - Gesture settings
 
     var activationDistance: Double {
         didSet { writeGestureSettings(); applyIfNotEditing() }
     }
 
     var fineControl: Bool {
-        didSet { writeGestureSettings(); applyPreferencesClosure() }
-    }
-
-    var swapSides: Bool {
         didSet { writeGestureSettings(); applyPreferencesClosure() }
     }
 
@@ -195,14 +211,21 @@ final class SettingsViewModel {
         self.applyPreferencesClosure = applyPreferences
 
         let settings = preferences.gestureSettings
-        self.edgeBandWidth = settings.edgeBandWidth
+
+        // Per-edge configuration
+        self.leftEdge = settings.leftEdge
+        self.rightEdge = settings.rightEdge
+        self.topEdge = settings.topEdge
+        self.bottomEdge = settings.bottomEdge
+
+        // Shared gesture settings
         self.activationDistance = settings.activationDistance
         self.fineControl = settings.fineControl
-        self.swapSides = settings.swapSides
         self.bottomQuarterOnly = settings.bottomQuarterOnly
         self.typingLockout = settings.typingLockout
         self.gestureTimeout = settings.gestureTimeout
 
+        // Adapter-layer settings
         self.isEnabled = preferences.isEnabled
         self.cursorFreezeEnabled = preferences.cursorFreezeEnabled
         self.useCoreAudioVolume = preferences.useCoreAudioVolume
@@ -263,13 +286,21 @@ final class SettingsViewModel {
     /// Re-read all properties from preferences. Called after import to sync the UI.
     private func reloadFromPreferences() {
         let settings = preferences.gestureSettings
-        edgeBandWidth = settings.edgeBandWidth
+
+        // Per-edge configuration
+        leftEdge = settings.leftEdge
+        rightEdge = settings.rightEdge
+        topEdge = settings.topEdge
+        bottomEdge = settings.bottomEdge
+
+        // Shared gesture settings
         activationDistance = settings.activationDistance
         fineControl = settings.fineControl
-        swapSides = settings.swapSides
         bottomQuarterOnly = settings.bottomQuarterOnly
         typingLockout = settings.typingLockout
         gestureTimeout = settings.gestureTimeout
+
+        // Adapter-layer settings
         isEnabled = preferences.isEnabled
         cursorFreezeEnabled = preferences.cursorFreezeEnabled
         useCoreAudioVolume = preferences.useCoreAudioVolume
@@ -286,13 +317,20 @@ final class SettingsViewModel {
 
     private func writeGestureSettings() {
         var settings = preferences.gestureSettings
-        settings.edgeBandWidth = edgeBandWidth
+
+        // Per-edge configuration
+        settings.leftEdge = leftEdge
+        settings.rightEdge = rightEdge
+        settings.topEdge = topEdge
+        settings.bottomEdge = bottomEdge
+
+        // Shared gesture settings
         settings.activationDistance = activationDistance
         settings.fineControl = fineControl
-        settings.swapSides = swapSides
         settings.bottomQuarterOnly = bottomQuarterOnly
         settings.typingLockout = typingLockout
         settings.gestureTimeout = gestureTimeout
+
         preferences.gestureSettings = settings
     }
 
