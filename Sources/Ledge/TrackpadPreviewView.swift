@@ -126,7 +126,7 @@ struct InteractiveTrackpadPreview: View {
         let color = bandColorFor(config: topEdge, isActive: isActive)
         let bandWidth = totalWidth - cornerInset * 2
 
-        return RoundedRectangle(cornerRadius: 12)
+        return RoundedRectangle(cornerRadius: 3)
             .fill(color)
             .frame(width: bandWidth, height: thickness)
             .offset(x: cornerInset, y: 0)
@@ -140,7 +140,7 @@ struct InteractiveTrackpadPreview: View {
         let color = bandColorFor(config: bottomEdge, isActive: isActive)
         let bandWidth = totalWidth - cornerInset * 2
 
-        return RoundedRectangle(cornerRadius: 12)
+        return RoundedRectangle(cornerRadius: 3)
             .fill(color)
             .frame(width: bandWidth, height: thickness)
             .offset(x: cornerInset, y: totalHeight - thickness)
@@ -158,7 +158,7 @@ struct InteractiveTrackpadPreview: View {
         let color = bandColorFor(config: leftEdge, isActive: isActive)
         let bandHeight = totalHeight - cornerInset * 2
 
-        return RoundedRectangle(cornerRadius: 12)
+        return RoundedRectangle(cornerRadius: 3)
             .fill(color)
             .frame(width: thickness, height: bandHeight)
             .offset(x: 0, y: cornerInset)
@@ -177,7 +177,7 @@ struct InteractiveTrackpadPreview: View {
         let color = bandColorFor(config: rightEdge, isActive: isActive)
         let bandHeight = totalHeight - cornerInset * 2
 
-        return RoundedRectangle(cornerRadius: 12)
+        return RoundedRectangle(cornerRadius: 3)
             .fill(color)
             .frame(width: thickness, height: bandHeight)
             .offset(x: totalWidth - thickness, y: cornerInset)
