@@ -3,17 +3,21 @@ import LedgeCore
 
 /// An interactive 4-edge trackpad preview with draggable edge bands and action pickers.
 ///
-/// Shows a dark rounded rectangle representing the trackpad surface with thin colored bands
-/// flush against all four inner edges. Each band is:
+/// Layout matches the Figma design: four colored bands SURROUND the trackpad body on the outside
+/// like a picture frame. The trackpad body (light rounded rectangle) sits in the center.
+///
+/// - Top band: full width across the top, extends beyond the trackpad corners
+/// - Bottom band: same as top but at the bottom
+/// - Left band: vertical, sits between top and bottom bands (shorter height)
+/// - Right band: same as left but on the right side
+/// - All bands have rounded ends and are ~12-14pt wide
+///
+/// Each band is:
 /// - Draggable to resize its width
 /// - Clickable to toggle enable/disable
 /// - Colored blue when enabled (opacity 0.3), grayed out when disabled (opacity 0.15)
-/// - Rendered with rounded ends for a polished appearance
 ///
-/// Layout matches the Figma design: landscape-oriented dark trackpad body with a subtle border,
-/// edge bands as thin colored strips sitting directly on the inner edges with rounded corners.
-///
-/// Action pickers are positioned OUTSIDE the trackpad shape: top dropdown above, bottom below,
+/// Action pickers are positioned OUTSIDE the frame: top dropdown above, bottom below,
 /// left to the left, right to the right.
 struct InteractiveTrackpadPreview: View {
     @Binding var leftEdge: EdgeConfig
@@ -24,14 +28,17 @@ struct InteractiveTrackpadPreview: View {
     /// Which edge is currently engaged (for live feedback during gestures). Optional.
     var engagedEdge: TrackpadEdge?
 
-    /// Corner radius for the trackpad shape.
-    private let trackpadCornerRadius: CGFloat = 18
-
-    /// Inset from the trackpad border where edge bands are drawn.
-    private let bandInset: CGFloat = 3
+    /// Corner radius for the trackpad body shape.
+    private let trackpadCornerRadius: CGFloat = 14
 
     /// Corner radius for edge band capsules.
-    private let bandCornerRadius: CGFloat = 4
+    private let bandCornerRadius: CGFloat = 6
+
+    /// Default band thickness in points (visual size of the frame bands).
+    private let defaultBandThickness: CGFloat = 12
+
+    /// Gap between bands and the trackpad body.
+    private let bandGap: CGFloat = 2
 
     var body: some View {
         VStack(spacing: 8) {
@@ -42,8 +49,8 @@ struct InteractiveTrackpadPreview: View {
                 // Left edge controls (to the left of trackpad)
                 edgeControlColumn(edge: .left, config: $leftEdge)
 
-                // The trackpad surface
-                trackpadView
+                // The trackpad surface with surrounding bands
+                trackpadFrameView
                     .aspectRatio(16.0 / 10.0, contentMode: .fit)
 
                 // Right edge controls (to the right of trackpad)
@@ -55,115 +62,148 @@ struct InteractiveTrackpadPreview: View {
         }
     }
 
-    // MARK: - Trackpad Surface
+    // MARK: - Trackpad Frame View (Bands Outside Body)
 
-    private var trackpadView: some View {
+    /// The composite view: bands on the outside forming a frame, trackpad body in the center.
+    private var trackpadFrameView: some View {
         GeometryReader { geometry in
-            let width = geometry.size.width
-            let height = geometry.size.height
+            let totalWidth = geometry.size.width
+            let totalHeight = geometry.size.height
 
-            ZStack {
-                // Dark trackpad background with subtle border (Figma style)
+            // Calculate band thicknesses (scaled by bandWidth fraction, minimum 6pt)
+            let topThickness = bandThickness(for: topEdge, totalDimension: totalHeight)
+            let bottomThickness = bandThickness(for: bottomEdge, totalDimension: totalHeight)
+            let leftThickness = bandThickness(for: leftEdge, totalDimension: totalWidth)
+            let rightThickness = bandThickness(for: rightEdge, totalDimension: totalWidth)
+
+            // The trackpad body sits inside the frame of bands
+            let bodyX = leftThickness + bandGap
+            let bodyY = topThickness + bandGap
+            let bodyWidth = totalWidth - leftThickness - rightThickness - (bandGap * 2)
+            let bodyHeight = totalHeight - topThickness - bottomThickness - (bandGap * 2)
+
+            ZStack(alignment: .topLeading) {
+                // Trackpad body - light rounded rectangle in the center
+                // UNVERIFIED: nsColor usage
                 RoundedRectangle(cornerRadius: trackpadCornerRadius)
                     .fill(Color(nsColor: .controlBackgroundColor).opacity(0.85))
                     .overlay(
                         RoundedRectangle(cornerRadius: trackpadCornerRadius)
                             .strokeBorder(Color.gray.opacity(0.35), lineWidth: 1.5)
                     )
+                    .frame(width: bodyWidth, height: bodyHeight)
+                    .offset(x: bodyX, y: bodyY)
 
-                // Left edge band - thin vertical strip flush on left inner edge
-                edgeBand(
-                    edge: .left,
-                    config: $leftEdge,
-                    parentWidth: width,
-                    parentHeight: height
+                // Top band - full width, at the top
+                topBandView(
+                    totalWidth: totalWidth,
+                    thickness: topThickness
                 )
 
-                // Right edge band - thin vertical strip flush on right inner edge
-                edgeBand(
-                    edge: .right,
-                    config: $rightEdge,
-                    parentWidth: width,
-                    parentHeight: height
+                // Bottom band - full width, at the bottom
+                bottomBandView(
+                    totalWidth: totalWidth,
+                    totalHeight: totalHeight,
+                    thickness: bottomThickness
                 )
 
-                // Top edge band - thin horizontal strip flush on top inner edge
-                edgeBand(
-                    edge: .top,
-                    config: $topEdge,
-                    parentWidth: width,
-                    parentHeight: height
+                // Left band - between top and bottom bands
+                leftBandView(
+                    topThickness: topThickness,
+                    bottomThickness: bottomThickness,
+                    totalHeight: totalHeight,
+                    thickness: leftThickness
                 )
 
-                // Bottom edge band - thin horizontal strip flush on bottom inner edge
-                edgeBand(
-                    edge: .bottom,
-                    config: $bottomEdge,
-                    parentWidth: width,
-                    parentHeight: height
+                // Right band - between top and bottom bands
+                rightBandView(
+                    topThickness: topThickness,
+                    bottomThickness: bottomThickness,
+                    totalWidth: totalWidth,
+                    totalHeight: totalHeight,
+                    thickness: rightThickness
                 )
             }
         }
     }
 
-    // MARK: - Edge Band View
+    // MARK: - Individual Band Views (Outside the Trackpad Body)
 
-    /// A single edge band overlay within the trackpad as a thin rounded strip flush against the edge.
-    @ViewBuilder
-    private func edgeBand(
-        edge: TrackpadEdge,
-        config: Binding<EdgeConfig>,
-        parentWidth: CGFloat,
-        parentHeight: CGFloat
+    /// Top band: spans full width, positioned at the very top of the frame.
+    private func topBandView(totalWidth: CGFloat, thickness: CGFloat) -> some View {
+        let isActive = engagedEdge == .top
+        let color = bandColorFor(config: topEdge, isActive: isActive)
+
+        return RoundedRectangle(cornerRadius: bandCornerRadius)
+            .fill(color)
+            .frame(width: totalWidth, height: thickness)
+            .offset(x: 0, y: 0)
+            .gesture(dragGestureVertical(config: $topEdge, parentHeight: thickness, fromTop: true))
+            .onTapGesture { topEdge.isEnabled.toggle() }
+    }
+
+    /// Bottom band: spans full width, positioned at the very bottom of the frame.
+    private func bottomBandView(totalWidth: CGFloat, totalHeight: CGFloat, thickness: CGFloat) -> some View {
+        let isActive = engagedEdge == .bottom
+        let color = bandColorFor(config: bottomEdge, isActive: isActive)
+
+        return RoundedRectangle(cornerRadius: bandCornerRadius)
+            .fill(color)
+            .frame(width: totalWidth, height: thickness)
+            .offset(x: 0, y: totalHeight - thickness)
+            .gesture(dragGestureVertical(config: $bottomEdge, parentHeight: thickness, fromTop: false))
+            .onTapGesture { bottomEdge.isEnabled.toggle() }
+    }
+
+    /// Left band: vertical strip between top and bottom bands.
+    private func leftBandView(
+        topThickness: CGFloat,
+        bottomThickness: CGFloat,
+        totalHeight: CGFloat,
+        thickness: CGFloat
     ) -> some View {
-        let isActive = engagedEdge == edge
-        let bandColor = bandColorFor(config: config.wrappedValue, isActive: isActive)
+        let isActive = engagedEdge == .left
+        let color = bandColorFor(config: leftEdge, isActive: isActive)
+        let bandHeight = totalHeight - topThickness - bottomThickness
 
-        switch edge {
-        case .left:
-            let bandPixelWidth = max(CGFloat(config.wrappedValue.bandWidth) * parentWidth, 6)
-            // Vertical strip on the left inner edge, inset from top/bottom
-            let bandHeight = parentHeight - (bandInset * 2) - (trackpadCornerRadius * 0.6)
-            RoundedRectangle(cornerRadius: bandCornerRadius)
-                .fill(bandColor)
-                .frame(width: bandPixelWidth, height: bandHeight)
-                .position(x: bandInset + bandPixelWidth / 2, y: parentHeight / 2)
-                .gesture(dragGestureHorizontal(config: config, parentWidth: parentWidth, fromLeft: true))
-                .onTapGesture { config.wrappedValue.isEnabled.toggle() }
+        return RoundedRectangle(cornerRadius: bandCornerRadius)
+            .fill(color)
+            .frame(width: thickness, height: bandHeight)
+            .offset(x: 0, y: topThickness)
+            .gesture(dragGestureHorizontal(config: $leftEdge, parentWidth: thickness, fromLeft: true))
+            .onTapGesture { leftEdge.isEnabled.toggle() }
+    }
 
-        case .right:
-            let bandPixelWidth = max(CGFloat(config.wrappedValue.bandWidth) * parentWidth, 6)
-            // Vertical strip on the right inner edge, inset from top/bottom
-            let bandHeight = parentHeight - (bandInset * 2) - (trackpadCornerRadius * 0.6)
-            RoundedRectangle(cornerRadius: bandCornerRadius)
-                .fill(bandColor)
-                .frame(width: bandPixelWidth, height: bandHeight)
-                .position(x: parentWidth - bandInset - bandPixelWidth / 2, y: parentHeight / 2)
-                .gesture(dragGestureHorizontal(config: config, parentWidth: parentWidth, fromLeft: false))
-                .onTapGesture { config.wrappedValue.isEnabled.toggle() }
+    /// Right band: vertical strip between top and bottom bands.
+    private func rightBandView(
+        topThickness: CGFloat,
+        bottomThickness: CGFloat,
+        totalWidth: CGFloat,
+        totalHeight: CGFloat,
+        thickness: CGFloat
+    ) -> some View {
+        let isActive = engagedEdge == .right
+        let color = bandColorFor(config: rightEdge, isActive: isActive)
+        let bandHeight = totalHeight - topThickness - bottomThickness
 
-        case .top:
-            let bandPixelHeight = max(CGFloat(config.wrappedValue.bandWidth) * parentHeight, 6)
-            // Horizontal strip on the top inner edge, inset from left/right
-            let bandWidth = parentWidth - (bandInset * 2) - (trackpadCornerRadius * 0.6)
-            RoundedRectangle(cornerRadius: bandCornerRadius)
-                .fill(bandColor)
-                .frame(width: bandWidth, height: bandPixelHeight)
-                .position(x: parentWidth / 2, y: bandInset + bandPixelHeight / 2)
-                .gesture(dragGestureVertical(config: config, parentHeight: parentHeight, fromTop: true))
-                .onTapGesture { config.wrappedValue.isEnabled.toggle() }
+        return RoundedRectangle(cornerRadius: bandCornerRadius)
+            .fill(color)
+            .frame(width: thickness, height: bandHeight)
+            .offset(x: totalWidth - thickness, y: topThickness)
+            .gesture(dragGestureHorizontal(config: $rightEdge, parentWidth: thickness, fromLeft: false))
+            .onTapGesture { rightEdge.isEnabled.toggle() }
+    }
 
-        case .bottom:
-            let bandPixelHeight = max(CGFloat(config.wrappedValue.bandWidth) * parentHeight, 6)
-            // Horizontal strip on the bottom inner edge, inset from left/right
-            let bandWidth = parentWidth - (bandInset * 2) - (trackpadCornerRadius * 0.6)
-            RoundedRectangle(cornerRadius: bandCornerRadius)
-                .fill(bandColor)
-                .frame(width: bandWidth, height: bandPixelHeight)
-                .position(x: parentWidth / 2, y: parentHeight - bandInset - bandPixelHeight / 2)
-                .gesture(dragGestureVertical(config: config, parentHeight: parentHeight, fromTop: false))
-                .onTapGesture { config.wrappedValue.isEnabled.toggle() }
-        }
+    // MARK: - Band Thickness Calculation
+
+    /// Calculate the pixel thickness of a band based on its config fraction.
+    /// Uses the bandWidth fraction scaled to a reasonable visual range (6-20pt).
+    private func bandThickness(for config: EdgeConfig, totalDimension: CGFloat) -> CGFloat {
+        // Map bandWidth fraction (typically 0.01-0.15) to a visual thickness.
+        // Default 0.025 -> ~12pt. Scale proportionally within 6-20pt range.
+        let fraction = CGFloat(config.bandWidth)
+        let scaled = defaultBandThickness * (fraction / 0.025)
+        return max(6, min(20, scaled))
     }
 
     /// Compute band color based on enabled state and engagement.
