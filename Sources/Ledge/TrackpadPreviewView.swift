@@ -3,19 +3,20 @@ import LedgeCore
 
 /// An interactive 4-edge trackpad preview with draggable edge bands and action pickers.
 ///
-/// Layout matches the Figma design: four colored bands SURROUND the trackpad body on the outside
-/// like a picture frame. The trackpad body (light rounded rectangle) sits in the center.
+/// Layout matches the Figma design: four thick colored bands surround the trackpad body,
+/// forming a solid frame/border with no gaps at the corners.
 ///
-/// - Top band: full width across the top, extends beyond the trackpad corners
-/// - Bottom band: same as top but at the bottom
-/// - Left band: vertical, sits between top and bottom bands (shorter height)
-/// - Right band: same as left but on the right side
-/// - All bands have rounded ends and are ~12-14pt wide
+/// - Top band: full width (extends corner to corner)
+/// - Bottom band: full width (extends corner to corner)
+/// - Left band: full height (extends corner to corner)
+/// - Right band: full height (extends corner to corner)
+/// - Bands overlap at corners (same color, so visually seamless)
+/// - Bands are thick (~20-24pt) and sit flush against the trackpad body (no gap)
 ///
 /// Each band is:
 /// - Draggable to resize its width
 /// - Clickable to toggle enable/disable
-/// - Colored blue when enabled (opacity 0.3), grayed out when disabled (opacity 0.15)
+/// - Colored blue when enabled (opacity 0.6), grayed out when disabled (opacity 0.15)
 ///
 /// Action pickers are positioned OUTSIDE the frame: top dropdown above, bottom below,
 /// left to the left, right to the right.
@@ -31,14 +32,11 @@ struct InteractiveTrackpadPreview: View {
     /// Corner radius for the trackpad body shape.
     private let trackpadCornerRadius: CGFloat = 14
 
-    /// Corner radius for edge band capsules.
-    private let bandCornerRadius: CGFloat = 6
+    /// Corner radius for the outer edge of bands (matching trackpad body corners).
+    private let bandOuterCornerRadius: CGFloat = 14
 
     /// Default band thickness in points (visual size of the frame bands).
-    private let defaultBandThickness: CGFloat = 12
-
-    /// Gap between bands and the trackpad body.
-    private let bandGap: CGFloat = 2
+    private let defaultBandThickness: CGFloat = 22
 
     var body: some View {
         VStack(spacing: 8) {
@@ -64,66 +62,63 @@ struct InteractiveTrackpadPreview: View {
 
     // MARK: - Trackpad Frame View (Bands Outside Body)
 
-    /// The composite view: bands on the outside forming a frame, trackpad body in the center.
+    /// The composite view: bands form a thick border around the trackpad body, meeting at all corners.
     private var trackpadFrameView: some View {
         GeometryReader { geometry in
             let totalWidth = geometry.size.width
             let totalHeight = geometry.size.height
 
-            // Calculate band thicknesses (scaled by bandWidth fraction, minimum 6pt)
+            // Calculate band thicknesses (scaled by bandWidth fraction)
             let topThickness = bandThickness(for: topEdge, totalDimension: totalHeight)
             let bottomThickness = bandThickness(for: bottomEdge, totalDimension: totalHeight)
             let leftThickness = bandThickness(for: leftEdge, totalDimension: totalWidth)
             let rightThickness = bandThickness(for: rightEdge, totalDimension: totalWidth)
 
-            // The trackpad body sits inside the frame of bands
-            let bodyX = leftThickness + bandGap
-            let bodyY = topThickness + bandGap
-            let bodyWidth = totalWidth - leftThickness - rightThickness - (bandGap * 2)
-            let bodyHeight = totalHeight - topThickness - bottomThickness - (bandGap * 2)
+            // The trackpad body sits inside the frame of bands - NO gap
+            let bodyX = leftThickness
+            let bodyY = topThickness
+            let bodyWidth = totalWidth - leftThickness - rightThickness
+            let bodyHeight = totalHeight - topThickness - bottomThickness
 
             ZStack(alignment: .topLeading) {
                 // Trackpad body - light rounded rectangle in the center
                 // UNVERIFIED: nsColor usage
-                RoundedRectangle(cornerRadius: trackpadCornerRadius)
+                RoundedRectangle(cornerRadius: trackpadCornerRadius - 4)
                     .fill(Color(nsColor: .controlBackgroundColor).opacity(0.85))
                     .overlay(
-                        RoundedRectangle(cornerRadius: trackpadCornerRadius)
+                        RoundedRectangle(cornerRadius: trackpadCornerRadius - 4)
                             .strokeBorder(Color.gray.opacity(0.35), lineWidth: 1.5)
                     )
                     .frame(width: bodyWidth, height: bodyHeight)
                     .offset(x: bodyX, y: bodyY)
 
-                // Top band - full width, at the top
+                // Top band - full width, at the top (covers top-left and top-right corners)
                 topBandView(
                     totalWidth: totalWidth,
                     thickness: topThickness
                 )
 
-                // Bottom band - full width, at the bottom
+                // Bottom band - full width, at the bottom (covers bottom-left and bottom-right corners)
                 bottomBandView(
                     totalWidth: totalWidth,
                     totalHeight: totalHeight,
                     thickness: bottomThickness
                 )
 
-                // Left band - between top and bottom bands
+                // Left band - full height (covers all corners on left side, overlaps top/bottom at corners)
                 leftBandView(
-                    topThickness: topThickness,
-                    bottomThickness: bottomThickness,
                     totalHeight: totalHeight,
                     thickness: leftThickness
                 )
 
-                // Right band - between top and bottom bands
+                // Right band - full height (covers all corners on right side, overlaps top/bottom at corners)
                 rightBandView(
-                    topThickness: topThickness,
-                    bottomThickness: bottomThickness,
                     totalWidth: totalWidth,
                     totalHeight: totalHeight,
                     thickness: rightThickness
                 )
             }
+            .clipShape(RoundedRectangle(cornerRadius: bandOuterCornerRadius))
         }
     }
 
@@ -134,7 +129,7 @@ struct InteractiveTrackpadPreview: View {
         let isActive = engagedEdge == .top
         let color = bandColorFor(config: topEdge, isActive: isActive)
 
-        return RoundedRectangle(cornerRadius: bandCornerRadius)
+        return Rectangle()
             .fill(color)
             .frame(width: totalWidth, height: thickness)
             .offset(x: 0, y: 0)
@@ -147,7 +142,7 @@ struct InteractiveTrackpadPreview: View {
         let isActive = engagedEdge == .bottom
         let color = bandColorFor(config: bottomEdge, isActive: isActive)
 
-        return RoundedRectangle(cornerRadius: bandCornerRadius)
+        return Rectangle()
             .fill(color)
             .frame(width: totalWidth, height: thickness)
             .offset(x: 0, y: totalHeight - thickness)
@@ -155,41 +150,35 @@ struct InteractiveTrackpadPreview: View {
             .onTapGesture { bottomEdge.isEnabled.toggle() }
     }
 
-    /// Left band: vertical strip between top and bottom bands.
+    /// Left band: full height vertical strip (overlaps top/bottom bands at corners).
     private func leftBandView(
-        topThickness: CGFloat,
-        bottomThickness: CGFloat,
         totalHeight: CGFloat,
         thickness: CGFloat
     ) -> some View {
         let isActive = engagedEdge == .left
         let color = bandColorFor(config: leftEdge, isActive: isActive)
-        let bandHeight = totalHeight - topThickness - bottomThickness
 
-        return RoundedRectangle(cornerRadius: bandCornerRadius)
+        return Rectangle()
             .fill(color)
-            .frame(width: thickness, height: bandHeight)
-            .offset(x: 0, y: topThickness)
+            .frame(width: thickness, height: totalHeight)
+            .offset(x: 0, y: 0)
             .gesture(dragGestureHorizontal(config: $leftEdge, parentWidth: thickness, fromLeft: true))
             .onTapGesture { leftEdge.isEnabled.toggle() }
     }
 
-    /// Right band: vertical strip between top and bottom bands.
+    /// Right band: full height vertical strip (overlaps top/bottom bands at corners).
     private func rightBandView(
-        topThickness: CGFloat,
-        bottomThickness: CGFloat,
         totalWidth: CGFloat,
         totalHeight: CGFloat,
         thickness: CGFloat
     ) -> some View {
         let isActive = engagedEdge == .right
         let color = bandColorFor(config: rightEdge, isActive: isActive)
-        let bandHeight = totalHeight - topThickness - bottomThickness
 
-        return RoundedRectangle(cornerRadius: bandCornerRadius)
+        return Rectangle()
             .fill(color)
-            .frame(width: thickness, height: bandHeight)
-            .offset(x: totalWidth - thickness, y: topThickness)
+            .frame(width: thickness, height: totalHeight)
+            .offset(x: totalWidth - thickness, y: 0)
             .gesture(dragGestureHorizontal(config: $rightEdge, parentWidth: thickness, fromLeft: false))
             .onTapGesture { rightEdge.isEnabled.toggle() }
     }
@@ -197,13 +186,12 @@ struct InteractiveTrackpadPreview: View {
     // MARK: - Band Thickness Calculation
 
     /// Calculate the pixel thickness of a band based on its config fraction.
-    /// Uses the bandWidth fraction scaled to a reasonable visual range (6-20pt).
+    /// Uses the bandWidth fraction scaled to a reasonable visual range (14-30pt).
+    /// Default 0.025 -> ~22pt. Scale proportionally.
     private func bandThickness(for config: EdgeConfig, totalDimension: CGFloat) -> CGFloat {
-        // Map bandWidth fraction (typically 0.01-0.15) to a visual thickness.
-        // Default 0.025 -> ~12pt. Scale proportionally within 6-20pt range.
         let fraction = CGFloat(config.bandWidth)
         let scaled = defaultBandThickness * (fraction / 0.025)
-        return max(6, min(20, scaled))
+        return max(14, min(30, scaled))
     }
 
     /// Compute band color based on enabled state and engagement.
@@ -211,7 +199,7 @@ struct InteractiveTrackpadPreview: View {
         if !config.isEnabled {
             return Color.gray.opacity(0.15)
         }
-        return isActive ? Color.blue.opacity(0.6) : Color.blue.opacity(0.3)
+        return isActive ? Color.blue.opacity(0.8) : Color.blue.opacity(0.6)
     }
 
     // MARK: - Drag Gestures
