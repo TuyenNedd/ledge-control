@@ -15,7 +15,7 @@ Make the settings toggles feel closer to macOS System Settings without shrinking
 
 Add one reusable `SettingsToggleRow` for all five settings toggles. Each row uses a full-width native `Toggle` whose label contains the leading title and description; the switch remains trailing-aligned by the system style. The switch uses `.toggleStyle(.switch)` and `.controlSize(.small)` for compact macOS-native metrics. Keeping the visible text inside the native label preserves the full label click target and associates the description with the control.
 
-Replace the duplicated toggle-plus-caption markup in General, Behavior, and Gesture settings with this row while retaining their existing bindings. Restore the unintended local `SettingsView` frame change from 680×500 to 900×650; leave the native 900×650 window and its resizable style unchanged.
+Replace the duplicated toggle-plus-caption markup in General, Behavior, and Gesture settings with this row while retaining their existing bindings. Keep the SwiftUI root and native window at 900×650; leave the native window's resizable style unchanged. An unintended local 680×500 edit was discarded before implementation and therefore does not appear in the committed diff.
 
 ## Alternatives considered
 

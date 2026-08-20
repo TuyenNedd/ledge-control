@@ -59,18 +59,20 @@ git add Sources/Ledge/SettingsToggleRow.swift
 git commit -m "feat(ui): add compact settings toggle row"
 ```
 
-### Task 2: Migrate General settings and restore the window frame
+### Task 2: Migrate General settings and verify the window frame
 
 **Files:**
 - Modify: `Sources/Ledge/SettingsView.swift:60-94`
 
-**Step 1: Restore the SwiftUI root frame**
+**Step 1: Verify the SwiftUI root frame**
 
-Change the pre-existing local `.frame(width: 680, height: 500)` back to:
+Confirm the root view remains:
 
 ```swift
 .frame(width: 900, height: 650)
 ```
+
+An unintended local 680×500 edit was discarded before implementation, so no frame-size change should appear in the committed diff.
 
 Do not change `SettingsWindow.swift`; its 900×650 initial content size and `.resizable` style are already correct.
 
