@@ -56,7 +56,7 @@ struct SettingsView: View {
         // UNVERIFIED: .navigationSplitViewStyle(.balanced) removes the sidebar toggle on macOS 14+.
         // If it does not, try .toolbar(removing: .sidebarToggle) instead.
         .navigationSplitViewStyle(.balanced)
-        .frame(width: 780, height: 580)
+        .frame(width: 900, height: 650)
     }
 }
 

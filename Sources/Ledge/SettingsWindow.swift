@@ -22,7 +22,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         self.viewModel = viewModel
         let hostingController = NSHostingController(rootView: SettingsView(viewModel: viewModel))
 
-        let contentFrame = NSRect(x: 0, y: 0, width: 780, height: 580)
+        let contentFrame = NSRect(x: 0, y: 0, width: 900, height: 650)
         window = NSWindow(
             contentRect: contentFrame,
             styleMask: [.titled, .closable, .fullSizeContentView],
