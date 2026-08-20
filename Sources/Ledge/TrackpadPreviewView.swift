@@ -3,15 +3,18 @@ import LedgeCore
 
 /// An interactive 4-edge trackpad preview with draggable edge bands and action pickers.
 ///
-/// Layout matches the Figma design: four thick colored bands surround the trackpad body,
-/// forming a solid frame/border with no gaps at the corners.
+/// Layout matches the Figma design: a single large light-gray RoundedRectangle forms
+/// the trackpad shape, with 4 straight rectangular bands positioned at the edges but
+/// inset from the corners by the corner radius amount.
 ///
-/// - Top band: full width (extends corner to corner)
-/// - Bottom band: full width (extends corner to corner)
-/// - Left band: full height (extends corner to corner)
-/// - Right band: full height (extends corner to corner)
-/// - Bands overlap at corners (same color, so visually seamless)
-/// - Bands are thick (~20-24pt) and sit flush against the trackpad body (no gap)
+/// - Top band: shorter than full width, inset from left/right corners
+/// - Bottom band: shorter than full width, inset from left/right corners
+/// - Left band: shorter than full height, inset from top/bottom corners
+/// - Right band: shorter than full height, inset from top/bottom corners
+/// - Corners expose the light gray trackpad background (no bands overlap corners)
+/// - No border/stroke on the trackpad body
+/// - Bands sit flush against the outer edge of the trackpad, directed inward
+/// - Band thickness ~20-22pt
 ///
 /// Each band is:
 /// - Draggable to resize its width
@@ -31,9 +34,6 @@ struct InteractiveTrackpadPreview: View {
 
     /// Corner radius for the trackpad body shape.
     private let trackpadCornerRadius: CGFloat = 14
-
-    /// Corner radius for the outer edge of bands (matching trackpad body corners).
-    private let bandOuterCornerRadius: CGFloat = 14
 
     /// Default band thickness in points (visual size of the frame bands).
     private let defaultBandThickness: CGFloat = 22
@@ -60,9 +60,10 @@ struct InteractiveTrackpadPreview: View {
         }
     }
 
-    // MARK: - Trackpad Frame View (Bands Outside Body)
+    // MARK: - Trackpad Frame View (Figma Layout)
 
-    /// The composite view: bands form a thick border around the trackpad body, meeting at all corners.
+    /// The composite view: a single large rounded rectangle background with 4 bands
+    /// positioned at the edges, inset from corners so the gray background shows through.
     private var trackpadFrameView: some View {
         GeometryReader { geometry in
             let totalWidth = geometry.size.width
@@ -74,111 +75,112 @@ struct InteractiveTrackpadPreview: View {
             let leftThickness = bandThickness(for: leftEdge, totalDimension: totalWidth)
             let rightThickness = bandThickness(for: rightEdge, totalDimension: totalWidth)
 
-            // The trackpad body sits inside the frame of bands - NO gap
-            let bodyX = leftThickness
-            let bodyY = topThickness
-            let bodyWidth = totalWidth - leftThickness - rightThickness
-            let bodyHeight = totalHeight - topThickness - bottomThickness
+            // Corner radius inset: bands do not extend into the rounded corner area
+            let cornerInset = trackpadCornerRadius
 
             ZStack(alignment: .topLeading) {
-                // Trackpad body - light rounded rectangle in the center
+                // Background: single large light-gray rounded rectangle, no border
                 // UNVERIFIED: nsColor usage
-                RoundedRectangle(cornerRadius: trackpadCornerRadius - 4)
-                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.85))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: trackpadCornerRadius - 4)
-                            .strokeBorder(Color.gray.opacity(0.35), lineWidth: 1.5)
-                    )
-                    .frame(width: bodyWidth, height: bodyHeight)
-                    .offset(x: bodyX, y: bodyY)
+                RoundedRectangle(cornerRadius: trackpadCornerRadius)
+                    .fill(Color.gray.opacity(0.12))
 
-                // Top band - full width, at the top (covers top-left and top-right corners)
+                // Top band: flush with top edge, inset from left/right by cornerInset
                 topBandView(
                     totalWidth: totalWidth,
-                    thickness: topThickness
+                    thickness: topThickness,
+                    cornerInset: cornerInset
                 )
 
-                // Bottom band - full width, at the bottom (covers bottom-left and bottom-right corners)
+                // Bottom band: flush with bottom edge, inset from left/right by cornerInset
                 bottomBandView(
                     totalWidth: totalWidth,
                     totalHeight: totalHeight,
-                    thickness: bottomThickness
+                    thickness: bottomThickness,
+                    cornerInset: cornerInset
                 )
 
-                // Left band - full height (covers all corners on left side, overlaps top/bottom at corners)
+                // Left band: flush with left edge, inset from top/bottom by cornerInset
                 leftBandView(
                     totalHeight: totalHeight,
-                    thickness: leftThickness
+                    thickness: leftThickness,
+                    cornerInset: cornerInset
                 )
 
-                // Right band - full height (covers all corners on right side, overlaps top/bottom at corners)
+                // Right band: flush with right edge, inset from top/bottom by cornerInset
                 rightBandView(
                     totalWidth: totalWidth,
                     totalHeight: totalHeight,
-                    thickness: rightThickness
+                    thickness: rightThickness,
+                    cornerInset: cornerInset
                 )
             }
-            .clipShape(RoundedRectangle(cornerRadius: bandOuterCornerRadius))
+            .clipShape(RoundedRectangle(cornerRadius: trackpadCornerRadius))
         }
     }
 
-    // MARK: - Individual Band Views (Outside the Trackpad Body)
+    // MARK: - Individual Band Views (Inset from Corners)
 
-    /// Top band: spans full width, positioned at the very top of the frame.
-    private func topBandView(totalWidth: CGFloat, thickness: CGFloat) -> some View {
+    /// Top band: positioned at top edge, inset from left/right corners.
+    private func topBandView(totalWidth: CGFloat, thickness: CGFloat, cornerInset: CGFloat) -> some View {
         let isActive = engagedEdge == .top
         let color = bandColorFor(config: topEdge, isActive: isActive)
+        let bandWidth = totalWidth - cornerInset * 2
 
         return Rectangle()
             .fill(color)
-            .frame(width: totalWidth, height: thickness)
-            .offset(x: 0, y: 0)
+            .frame(width: bandWidth, height: thickness)
+            .offset(x: cornerInset, y: 0)
             .gesture(dragGestureVertical(config: $topEdge, parentHeight: thickness, fromTop: true))
             .onTapGesture { topEdge.isEnabled.toggle() }
     }
 
-    /// Bottom band: spans full width, positioned at the very bottom of the frame.
-    private func bottomBandView(totalWidth: CGFloat, totalHeight: CGFloat, thickness: CGFloat) -> some View {
+    /// Bottom band: positioned at bottom edge, inset from left/right corners.
+    private func bottomBandView(totalWidth: CGFloat, totalHeight: CGFloat, thickness: CGFloat, cornerInset: CGFloat) -> some View {
         let isActive = engagedEdge == .bottom
         let color = bandColorFor(config: bottomEdge, isActive: isActive)
+        let bandWidth = totalWidth - cornerInset * 2
 
         return Rectangle()
             .fill(color)
-            .frame(width: totalWidth, height: thickness)
-            .offset(x: 0, y: totalHeight - thickness)
+            .frame(width: bandWidth, height: thickness)
+            .offset(x: cornerInset, y: totalHeight - thickness)
             .gesture(dragGestureVertical(config: $bottomEdge, parentHeight: thickness, fromTop: false))
             .onTapGesture { bottomEdge.isEnabled.toggle() }
     }
 
-    /// Left band: full height vertical strip (overlaps top/bottom bands at corners).
+    /// Left band: positioned at left edge, inset from top/bottom corners.
     private func leftBandView(
         totalHeight: CGFloat,
-        thickness: CGFloat
+        thickness: CGFloat,
+        cornerInset: CGFloat
     ) -> some View {
         let isActive = engagedEdge == .left
         let color = bandColorFor(config: leftEdge, isActive: isActive)
+        let bandHeight = totalHeight - cornerInset * 2
 
         return Rectangle()
             .fill(color)
-            .frame(width: thickness, height: totalHeight)
-            .offset(x: 0, y: 0)
+            .frame(width: thickness, height: bandHeight)
+            .offset(x: 0, y: cornerInset)
             .gesture(dragGestureHorizontal(config: $leftEdge, parentWidth: thickness, fromLeft: true))
             .onTapGesture { leftEdge.isEnabled.toggle() }
     }
 
-    /// Right band: full height vertical strip (overlaps top/bottom bands at corners).
+    /// Right band: positioned at right edge, inset from top/bottom corners.
     private func rightBandView(
         totalWidth: CGFloat,
         totalHeight: CGFloat,
-        thickness: CGFloat
+        thickness: CGFloat,
+        cornerInset: CGFloat
     ) -> some View {
         let isActive = engagedEdge == .right
         let color = bandColorFor(config: rightEdge, isActive: isActive)
+        let bandHeight = totalHeight - cornerInset * 2
 
         return Rectangle()
             .fill(color)
-            .frame(width: thickness, height: totalHeight)
-            .offset(x: totalWidth - thickness, y: 0)
+            .frame(width: thickness, height: bandHeight)
+            .offset(x: totalWidth - thickness, y: cornerInset)
             .gesture(dragGestureHorizontal(config: $rightEdge, parentWidth: thickness, fromLeft: false))
             .onTapGesture { rightEdge.isEnabled.toggle() }
     }
