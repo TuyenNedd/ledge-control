@@ -74,26 +74,24 @@ struct GeneralSettingsTab: View {
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
 
-            Toggle("Enable Ledge", isOn: Binding(
-                get: { viewModel.isEnabled },
-                set: { viewModel.isEnabled = $0 }
-            ))
-                .toggleStyle(.switch)
-            Text("Master switch - disables all gesture detection when off.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .padding(.leading, 20)
+            SettingsToggleRow(
+                title: "Enable Ledge",
+                description: "Master switch - disables all gesture detection when off.",
+                isOn: Binding(
+                    get: { viewModel.isEnabled },
+                    set: { viewModel.isEnabled = $0 }
+                )
+            )
 
-            Toggle("Launch at Login", isOn: Binding(
-                get: { viewModel.launchAtLogin },
-                set: { viewModel.launchAtLogin = $0 }
-            ))
-                .toggleStyle(.switch)
-                .padding(.top, 8)
-            Text("Start Ledge automatically when you log in.")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .padding(.leading, 20)
+            SettingsToggleRow(
+                title: "Launch at Login",
+                description: "Start Ledge automatically when you log in.",
+                isOn: Binding(
+                    get: { viewModel.launchAtLogin },
+                    set: { viewModel.launchAtLogin = $0 }
+                )
+            )
+            .padding(.top, 8)
 
             // MARK: - Settings Data section
             Text("SETTINGS DATA")
