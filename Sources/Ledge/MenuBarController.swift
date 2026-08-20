@@ -59,7 +59,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        addToggle("Swap Sides", action: #selector(toggleSwapSides)) { preferences.gestureSettings.swapSides }
         addToggle("Fine Control", action: #selector(toggleFineControl)) { preferences.gestureSettings.fineControl }
         addToggle("Bottom Quarter Only", action: #selector(toggleBottomQuarterOnly)) {
             preferences.gestureSettings.bottomQuarterOnly
@@ -123,13 +122,6 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func toggleEnabled() {
         preferences.isEnabled.toggle()
-        controller.applyPreferences()
-    }
-
-    @objc private func toggleSwapSides() {
-        var settings = preferences.gestureSettings
-        settings.swapSides.toggle()
-        preferences.gestureSettings = settings
         controller.applyPreferences()
     }
 

@@ -6,6 +6,10 @@ import SwiftUI
 /// Follows the same ownership pattern as `DiagnosticsWindow`: the window is
 /// `isReleasedWhenClosed = false` so the menu can reopen it, and `AppDelegate` holds the single
 /// instance for the lifetime of the process.
+///
+/// When Settings opens, the app switches to `.regular` activation policy so it appears in the
+/// Dock and gains standard window behaviors (Cmd+W to close). When the window closes, it
+/// switches back to `.accessory` to hide from the Dock.
 final class SettingsWindow: NSObject, NSWindowDelegate {
     private let window: NSWindow
     private let viewModel: SettingsViewModel
@@ -41,9 +45,25 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         // Capture the frontmost app before Settings takes focus, so "Add Current App" knows
         // which app the user was working in.
         viewModel.previousFrontmostApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+
+        // Show app in the Dock while Settings is open. This gives us standard window behaviors:
+        // - Cmd+W to close (comes free with .regular activation policy and .closable style mask)
+        // - App icon visible in Dock for easy switching
+        // UNVERIFIED: setActivationPolicy(.regular) while already running as .accessory. The
+        // transition should be immediate but may have edge cases with window ordering.
+        NSApp.setActivationPolicy(.regular)
+
         window.makeKeyAndOrderFront(nil)
-        // Required because the app is `.accessory`: without this the window can appear behind
-        // whatever the user was looking at.
+        // Activate to bring the window to front.
         NSApp.activate()
+    }
+
+    // MARK: - NSWindowDelegate
+
+    func windowWillClose(_ notification: Notification) {
+        // Hide from Dock when Settings closes, returning to menu bar-only mode.
+        // UNVERIFIED: setActivationPolicy(.accessory) while a window is closing. There may be
+        // a brief flicker of the Dock icon disappearing. Dispatching async may help if needed.
+        NSApp.setActivationPolicy(.accessory)
     }
 }

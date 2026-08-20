@@ -1,14 +1,298 @@
 import SwiftUI
+import LedgeCore
 
-/// A visual preview of the trackpad with edge band overlays.
+/// An interactive 4-edge trackpad preview with draggable edge bands and action pickers.
 ///
-/// Shows a rounded rectangle representing the trackpad surface with a visible border,
-/// and semi-transparent blue bands on left and right edges that light up when engaged.
-/// No finger-tracking dot — the bands themselves are the feedback.
+/// Shows a rounded rectangle representing the trackpad surface with visible bands on all four
+/// edges. Each band is:
+/// - Draggable to resize its width
+/// - Clickable to toggle enable/disable
+/// - Colored blue when enabled (opacity 0.3), grayed out when disabled (opacity 0.15)
+///
+/// Action pickers are positioned OUTSIDE the trackpad shape: top dropdown above, bottom below,
+/// left to the left, right to the right.
+///
+/// UNVERIFIED: DragGesture behavior within a GeometryReader on macOS 14+ may have coordinate
+/// system nuances depending on the parent view hierarchy.
+struct InteractiveTrackpadPreview: View {
+    @Binding var leftEdge: EdgeConfig
+    @Binding var rightEdge: EdgeConfig
+    @Binding var topEdge: EdgeConfig
+    @Binding var bottomEdge: EdgeConfig
+
+    /// Which edge is currently engaged (for live feedback during gestures). Optional.
+    var engagedEdge: TrackpadEdge?
+
+    var body: some View {
+        VStack(spacing: 8) {
+            // Top edge controls (above trackpad)
+            edgeControlRow(edge: .top, config: $topEdge)
+
+            HStack(spacing: 8) {
+                // Left edge controls (to the left of trackpad)
+                edgeControlColumn(edge: .left, config: $leftEdge)
+
+                // The trackpad surface
+                trackpadView
+                    .aspectRatio(3.0 / 2.0, contentMode: .fit)
+
+                // Right edge controls (to the right of trackpad)
+                edgeControlColumn(edge: .right, config: $rightEdge)
+            }
+
+            // Bottom edge controls (below trackpad)
+            edgeControlRow(edge: .bottom, config: $bottomEdge)
+        }
+    }
+
+    // MARK: - Trackpad Surface
+
+    private var trackpadView: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let height = geometry.size.height
+
+            ZStack {
+                // Trackpad background
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(Color.gray.opacity(0.12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14)
+                            .strokeBorder(Color.gray.opacity(0.3), lineWidth: 1.5)
+                    )
+
+                // Left edge band
+                edgeBand(
+                    edge: .left,
+                    config: $leftEdge,
+                    parentWidth: width,
+                    parentHeight: height
+                )
+
+                // Right edge band
+                edgeBand(
+                    edge: .right,
+                    config: $rightEdge,
+                    parentWidth: width,
+                    parentHeight: height
+                )
+
+                // Top edge band
+                edgeBand(
+                    edge: .top,
+                    config: $topEdge,
+                    parentWidth: width,
+                    parentHeight: height
+                )
+
+                // Bottom edge band
+                edgeBand(
+                    edge: .bottom,
+                    config: $bottomEdge,
+                    parentWidth: width,
+                    parentHeight: height
+                )
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+    }
+
+    // MARK: - Edge Band View
+
+    /// A single edge band overlay within the trackpad, draggable to resize.
+    @ViewBuilder
+    private func edgeBand(
+        edge: TrackpadEdge,
+        config: Binding<EdgeConfig>,
+        parentWidth: CGFloat,
+        parentHeight: CGFloat
+    ) -> some View {
+        let isActive = engagedEdge == edge
+        let bandColor = bandColorFor(config: config.wrappedValue, isActive: isActive)
+
+        switch edge {
+        case .left:
+            let bandPixelWidth = max(CGFloat(config.wrappedValue.bandWidth) * parentWidth, 8)
+            HStack(spacing: 0) {
+                Rectangle()
+                    .fill(bandColor)
+                    .frame(width: bandPixelWidth, height: parentHeight)
+                    .gesture(dragGestureHorizontal(config: config, parentWidth: parentWidth, fromLeft: true))
+                    .onTapGesture { config.wrappedValue.isEnabled.toggle() }
+                Spacer()
+            }
+        case .right:
+            let bandPixelWidth = max(CGFloat(config.wrappedValue.bandWidth) * parentWidth, 8)
+            HStack(spacing: 0) {
+                Spacer()
+                Rectangle()
+                    .fill(bandColor)
+                    .frame(width: bandPixelWidth, height: parentHeight)
+                    .gesture(dragGestureHorizontal(config: config, parentWidth: parentWidth, fromLeft: false))
+                    .onTapGesture { config.wrappedValue.isEnabled.toggle() }
+            }
+        case .top:
+            let bandPixelHeight = max(CGFloat(config.wrappedValue.bandWidth) * parentHeight, 8)
+            VStack(spacing: 0) {
+                Rectangle()
+                    .fill(bandColor)
+                    .frame(width: parentWidth, height: bandPixelHeight)
+                    .gesture(dragGestureVertical(config: config, parentHeight: parentHeight, fromTop: true))
+                    .onTapGesture { config.wrappedValue.isEnabled.toggle() }
+                Spacer()
+            }
+        case .bottom:
+            let bandPixelHeight = max(CGFloat(config.wrappedValue.bandWidth) * parentHeight, 8)
+            VStack(spacing: 0) {
+                Spacer()
+                Rectangle()
+                    .fill(bandColor)
+                    .frame(width: parentWidth, height: bandPixelHeight)
+                    .gesture(dragGestureVertical(config: config, parentHeight: parentHeight, fromTop: false))
+                    .onTapGesture { config.wrappedValue.isEnabled.toggle() }
+            }
+        }
+    }
+
+    /// Compute band color based on enabled state and engagement.
+    private func bandColorFor(config: EdgeConfig, isActive: Bool) -> Color {
+        if !config.isEnabled {
+            return Color.gray.opacity(0.15)
+        }
+        return isActive ? Color.blue.opacity(0.6) : Color.blue.opacity(0.3)
+    }
+
+    // MARK: - Drag Gestures
+
+    /// Horizontal drag gesture for left/right edge band resizing.
+    /// UNVERIFIED: DragGesture translation coordinate system on macOS 14+ within GeometryReader.
+    private func dragGestureHorizontal(
+        config: Binding<EdgeConfig>,
+        parentWidth: CGFloat,
+        fromLeft: Bool
+    ) -> some Gesture {
+        DragGesture(minimumDistance: 2)
+            .onChanged { value in
+                let deltaFraction: Double
+                if fromLeft {
+                    // Dragging right increases left band width
+                    deltaFraction = Double(value.translation.width / parentWidth)
+                } else {
+                    // Dragging left increases right band width
+                    deltaFraction = Double(-value.translation.width / parentWidth)
+                }
+                let newWidth = max(0.01, min(0.15, config.wrappedValue.bandWidth + deltaFraction * 0.1))
+                config.wrappedValue.bandWidth = newWidth
+            }
+    }
+
+    /// Vertical drag gesture for top/bottom edge band resizing.
+    /// UNVERIFIED: DragGesture translation coordinate system on macOS 14+ within GeometryReader.
+    private func dragGestureVertical(
+        config: Binding<EdgeConfig>,
+        parentHeight: CGFloat,
+        fromTop: Bool
+    ) -> some Gesture {
+        DragGesture(minimumDistance: 2)
+            .onChanged { value in
+                let deltaFraction: Double
+                if fromTop {
+                    // Dragging down increases top band height
+                    deltaFraction = Double(value.translation.height / parentHeight)
+                } else {
+                    // Dragging up increases bottom band height
+                    deltaFraction = Double(-value.translation.height / parentHeight)
+                }
+                let newWidth = max(0.01, min(0.15, config.wrappedValue.bandWidth + deltaFraction * 0.1))
+                config.wrappedValue.bandWidth = newWidth
+            }
+    }
+
+    // MARK: - Edge Controls (Outside Trackpad)
+
+    /// Horizontal row of controls for top/bottom edge (action picker + band width display).
+    private func edgeControlRow(edge: TrackpadEdge, config: Binding<EdgeConfig>) -> some View {
+        HStack(spacing: 8) {
+            Picker("", selection: config.action) {
+                ForEach(EdgeAction.allCases, id: \.self) { action in
+                    Text(action.displayName).tag(action)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 160)
+
+            Text(bandWidthLabel(config.wrappedValue.bandWidth))
+                .font(.caption)
+                .monospacedDigit()
+                .foregroundStyle(config.wrappedValue.isEnabled ? .primary : .tertiary)
+        }
+        .opacity(config.wrappedValue.isEnabled ? 1.0 : 0.5)
+    }
+
+    /// Vertical column of controls for left/right edge (action picker + band width display).
+    private func edgeControlColumn(edge: TrackpadEdge, config: Binding<EdgeConfig>) -> some View {
+        VStack(spacing: 4) {
+            Picker("", selection: config.action) {
+                ForEach(EdgeAction.allCases, id: \.self) { action in
+                    Text(action.displayName).tag(action)
+                }
+            }
+            .labelsHidden()
+            .frame(width: 120)
+
+            Text(bandWidthLabel(config.wrappedValue.bandWidth))
+                .font(.caption)
+                .monospacedDigit()
+                .foregroundStyle(config.wrappedValue.isEnabled ? .primary : .tertiary)
+        }
+        .opacity(config.wrappedValue.isEnabled ? 1.0 : 0.5)
+    }
+
+    // MARK: - Helpers
+
+    /// Displays approximate mm value (1.0 fraction ~ 160mm trackpad width).
+    private func bandWidthLabel(_ fraction: Double) -> String {
+        let mm = fraction * 160.0
+        return String(format: "%.1f mm", mm)
+    }
+}
+
+// MARK: - Binding Extension for EdgeConfig
+
+/// Convenience extension to create a Binding<EdgeAction> from a Binding<EdgeConfig>.
+private extension Binding where Value == EdgeConfig {
+    var action: Binding<EdgeAction> {
+        Binding<EdgeAction>(
+            get: { self.wrappedValue.action },
+            set: { self.wrappedValue.action = $0 }
+        )
+    }
+
+    var bandWidth: Binding<Double> {
+        Binding<Double>(
+            get: { self.wrappedValue.bandWidth },
+            set: { self.wrappedValue.bandWidth = $0 }
+        )
+    }
+
+    var isEnabled: Binding<Bool> {
+        Binding<Bool>(
+            get: { self.wrappedValue.isEnabled },
+            set: { self.wrappedValue.isEnabled = $0 }
+        )
+    }
+}
+
+// MARK: - Legacy TrackpadPreviewView (Onboarding Compatibility)
+
+/// A simpler 2-edge preview used by onboarding, compatible with the old API shape.
+///
+/// Shows only left and right bands (no interactivity) for the "Try It" onboarding page.
+/// This is kept separate from the interactive 4-edge preview to avoid breaking the onboarding
+/// flow while providing the full interactive experience in Settings.
 struct TrackpadPreviewView: View {
     @Binding var edgeBandWidth: Double
     var swapSides: Bool
-    /// Which edge is currently engaged: "left", "right", or nil.
     var engagedEdge: String?
 
     init(edgeBandWidth: Binding<Double>, swapSides: Bool, engagedEdge: String? = nil) {
@@ -17,24 +301,12 @@ struct TrackpadPreviewView: View {
         self.engagedEdge = engagedEdge
     }
 
-    // Keep old init for backwards compat (Settings tab uses fingerPosition/isEngaged)
-    init(edgeBandWidth: Binding<Double>, swapSides: Bool, fingerPosition: CGPoint?, isEngaged: Bool) {
-        self._edgeBandWidth = edgeBandWidth
-        self.swapSides = swapSides
-        self.engagedEdge = nil
-    }
-
     private var mmLabel: String {
         String(format: "%.1f mm", edgeBandWidth * 160.0)
     }
 
-    private var leftBandActive: Bool {
-        engagedEdge == "left"
-    }
-
-    private var rightBandActive: Bool {
-        engagedEdge == "right"
-    }
+    private var leftBandActive: Bool { engagedEdge == "left" }
+    private var rightBandActive: Bool { engagedEdge == "right" }
 
     var body: some View {
         GeometryReader { geometry in
@@ -43,7 +315,6 @@ struct TrackpadPreviewView: View {
             let bandPixelWidth = max(CGFloat(edgeBandWidth) * width, 14)
 
             ZStack {
-                // Trackpad surface — darker than window background so it's always visible
                 RoundedRectangle(cornerRadius: 14)
                     .fill(Color.gray.opacity(0.12))
                     .overlay(
@@ -51,7 +322,6 @@ struct TrackpadPreviewView: View {
                             .strokeBorder(Color.gray.opacity(0.3), lineWidth: 1.5)
                     )
 
-                // Left edge band — flush to the left edge, no padding
                 HStack(spacing: 0) {
                     RoundedRectangle(cornerRadius: 0)
                         .fill(leftBandActive ? Color.blue.opacity(0.6) : Color.blue.opacity(0.2))
@@ -60,7 +330,6 @@ struct TrackpadPreviewView: View {
                     Spacer()
                 }
 
-                // Right edge band — flush to the right edge, no padding
                 HStack(spacing: 0) {
                     Spacer()
                     RoundedRectangle(cornerRadius: 0)
@@ -69,7 +338,6 @@ struct TrackpadPreviewView: View {
                         .animation(.easeInOut(duration: 0.2), value: rightBandActive)
                 }
 
-                // Center mm label
                 Text(mmLabel)
                     .font(.caption)
                     .foregroundStyle(.tertiary)

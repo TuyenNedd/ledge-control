@@ -6,7 +6,7 @@ import LedgeCore
 /// Joins the touch source to the system controls, and owns the one `GestureEngine`.
 ///
 /// This is a wire, not a brain. It contains no thresholds and makes no judgement about what the
-/// user meant — every such decision was made in `LedgeCore` and arrives here as a
+/// user meant -- every such decision was made in `LedgeCore` and arrives here as a
 /// `GestureEvent`. The `switch`es below translate vocabulary; if a threshold or a heuristic ever
 /// appears in this file, it is in the wrong layer.
 ///
@@ -20,7 +20,7 @@ import LedgeCore
 ///    `apply(_:)`, so an open control cannot be leaked.
 /// 3. **Frames arrive in order,** because the tap is on the main run loop and this object is only
 ///    ever touched from there.
-/// 4. **The engine is a `var` held in one place** and mutated in place — never copied into a
+/// 4. **The engine is a `var` held in one place** and mutated in place -- never copied into a
 ///    local, never passed to anything.
 final class GestureController {
     private var engine: GestureEngine
@@ -31,15 +31,18 @@ final class GestureController {
     private let mediaKeyVolume: VolumeAdjusting
     private let coreAudioVolume: VolumeAdjusting
 
-    /// Which control a gesture currently owns, if any. Maintained purely by pairing the engine's
+    /// Which edge a gesture currently owns, if any. Maintained purely by pairing the engine's
     /// `.engaged`/`.disengaged` events, which the engine guarantees come in pairs.
-    private(set) var engagedControl: Control?
+    private(set) var engagedEdge: TrackpadEdge?
+
+    /// Which action the current gesture is driving, if any.
+    private(set) var engagedAction: EdgeAction?
 
     /// Called on the main thread whenever the engagement state transitions.
     /// `true` means a gesture just engaged; `false` means it just disengaged.
     var onEngagementChanged: ((Bool) -> Void)?
 
-    /// The most recent frame, and how many have arrived. Diagnostics only — nothing in the
+    /// The most recent frame, and how many have arrived. Diagnostics only -- nothing in the
     /// gesture path reads these, and the frame counter is what distinguishes "no touches" from
     /// "no events arriving at all", which are the two failure modes that look identical.
     private(set) var lastFrame: TouchFrame?
@@ -116,7 +119,7 @@ final class GestureController {
         apply(engine.setModifierHeld(held))
     }
 
-    /// The world changed underneath us — the tap was disabled and re-enabled, so frames were
+    /// The world changed underneath us -- the tap was disabled and re-enabled, so frames were
     /// missed. `cancel()` rather than `setEnabled(false)`, because the engine should still be
     /// listening for the next gesture.
     private func interrupt() {
@@ -146,53 +149,107 @@ final class GestureController {
     private func apply(_ events: [GestureEvent]) {
         for event in events {
             switch event {
-            case .engaged(let control):
-                engagedControl = control
+            case .engaged(let edge, let action):
+                engagedEdge = edge
+                engagedAction = action
                 onEngagementChanged?(true)
                 if preferences.cursorFreezeEnabled {
                     // Save the current cursor position in CG coordinates (top-left origin).
-                    // CGEvent(source: nil)?.location gives us CG coordinates directly.
-                    // Each mouseMoved event will warp back to this point.
                     touchSource.savedCursorPosition = CGEvent(source: nil)?.location ?? .zero
                 }
             case .disengaged:
                 touchSource.savedCursorPosition = nil
-                engagedControl = nil
+                engagedEdge = nil
+                engagedAction = nil
                 onEngagementChanged?(false)
-            case .step(let control, let direction):
-                perform(control, direction)
+            case .step(let edge, let action, let direction):
+                perform(action, direction)
                 stepCount += 1
             }
         }
         // Pushed rather than pulled so the tap callback does not have to reach back into the
         // engine on the hot path.
-        touchSource.isGestureEngaged = engagedControl != nil
+        touchSource.isGestureEngaged = engagedEdge != nil
     }
 
-    private func perform(_ control: Control, _ direction: StepDirection) {
-        // Read per step rather than captured at engagement. `GestureEngine` snapshots its
-        // settings for the life of a gesture, so a mid-slide menu change cannot alter how *often*
-        // a step fires — but it can alter how big the OS considers that step, for the remainder of
-        // the slide. Not worth a mechanism: changing a menu item requires using the trackpad,
-        // which has already ended the gesture.
+    /// Dispatch the appropriate system action for the given `EdgeAction` and direction.
+    ///
+    /// Each action is a direct translation from the engine's vocabulary into the OS-level call.
+    /// The engine has already decided a step is due and which way it goes.
+    private func perform(_ action: EdgeAction, _ direction: StepDirection) {
         let fine = engine.settings.fineControl
-        switch control {
-        case .volume: volumeBackend.adjust(direction, fine: fine)
+        switch action {
+        case .volume:
+            volumeBackend.adjust(direction, fine: fine)
+
         case .brightness:
             brightness.adjust(direction, fine: fine)
             // After DisplayServices sets the brightness, post a brightness media key event.
-            // This may trigger the native brightness indicator on macOS 26 Tahoe, similar to
-            // how volume media keys trigger the native volume HUD.
+            // This may trigger the native brightness indicator on macOS 26 Tahoe.
             // UNVERIFIED: if this does not produce a native indicator, a custom HUD may need
-            // to be restored. The media key alone (without DisplayServices) might also work as
-            // the primary control on newer macOS versions.
+            // to be restored.
             let key: MediaKey = direction == .up ? .brightnessUp : .brightnessDown
             MediaKeySender.post(key, fine: fine)
+
+        case .zoom:
+            // Synthesize Cmd+Plus (zoom in) or Cmd+Minus (zoom out) via CGEvent.
+            // UNVERIFIED: CGEvent key code 24 is '=' (which becomes '+' with Shift on US layout),
+            // key code 27 is '-'. Using Cmd flag only (no Shift) as Cmd+= is treated as zoom in
+            // by most apps, same as Cmd+Plus.
+            let keyCode: UInt16 = direction == .up ? 24 : 27  // '=' for zoom in, '-' for zoom out
+            synthesizeKeyPress(keyCode: keyCode, flags: .maskCommand)
+
+        case .nextPreviousTrack:
+            // Synthesize media key NX_KEYTYPE_NEXT (key code 17) or NX_KEYTYPE_PREVIOUS (key code 18).
+            // UNVERIFIED: These NX_KEYTYPE constants may differ across macOS versions. The values
+            // 17 and 18 come from IOKit/hidsystem/ev_keymap.h.
+            let mediaKey = direction == .up ? MediaKeyForTransport.next : MediaKeyForTransport.previous
+            MediaKeyForTransport.post(mediaKey)
+
+        case .scroll:
+            // Synthesize scroll wheel events via CGEvent.
+            // UNVERIFIED: The scroll delta value may need tuning for comfortable scrolling speed.
+            let delta: Int32 = direction == .up ? 3 : -3
+            synthesizeScrollEvent(deltaY: delta)
+
+        case .none:
+            // No-op: edge is configured to do nothing.
+            break
         }
     }
 
+    /// Synthesize a key press event with the given key code and modifier flags.
+    ///
+    /// UNVERIFIED: CGEvent(keyboardEventSource:virtualKey:keyDown:) behavior with specific
+    /// modifier flags on all macOS versions.
+    private func synthesizeKeyPress(keyCode: UInt16, flags: CGEventFlags) {
+        guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
+              let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false)
+        else { return }
+        keyDown.flags = flags
+        keyUp.flags = flags
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+    }
+
+    /// Synthesize a scroll wheel event with the given vertical delta.
+    ///
+    /// UNVERIFIED: CGEvent(scrollWheelEvent2Source:...) availability and behavior across macOS
+    /// versions. Using `.line` units for discrete scroll steps.
+    private func synthesizeScrollEvent(deltaY: Int32) {
+        guard let event = CGEvent(
+            scrollWheelEvent2Source: nil,
+            units: .line,
+            wheelCount: 1,
+            wheel1: deltaY,
+            wheel2: 0,
+            wheel3: 0
+        ) else { return }
+        event.post(tap: .cghidEventTap)
+    }
+
     /// Which volume implementation is in force. A preference lookup, not a decision about
-    /// behaviour — both backends do the same job with different trade-offs.
+    /// behaviour -- both backends do the same job with different trade-offs.
     private var volumeBackend: VolumeAdjusting {
         preferences.useCoreAudioVolume ? coreAudioVolume : mediaKeyVolume
     }
@@ -205,8 +262,50 @@ final class GestureController {
     var eventCount: Int { touchSource.eventCount }
     var isBrightnessAvailable: Bool { brightness.isAvailable }
     var isUsingCoreAudioVolume: Bool { preferences.useCoreAudioVolume }
-    var isCursorLocked: Bool { engagedControl != nil && preferences.cursorFreezeEnabled }
+    var isCursorLocked: Bool { engagedEdge != nil && preferences.cursorFreezeEnabled }
 
     func currentVolumeScalar() -> Float? { volumeBackend.currentScalar() }
     func currentBrightness() -> Float? { brightness.currentBrightness() }
+}
+
+// MARK: - Media Key for Transport Controls
+
+/// Synthesizes transport media key events (next/previous track) via NSEvent system-defined events.
+///
+/// Uses the same mechanism as `MediaKeySender` but for transport control keys rather than
+/// volume/brightness keys.
+///
+/// UNVERIFIED: NX_KEYTYPE_NEXT = 17 and NX_KEYTYPE_PREVIOUS = 18 values from
+/// IOKit/hidsystem/ev_keymap.h. These are not modularized for Swift import.
+private enum MediaKeyForTransport {
+    static let next = 17
+    static let previous = 18
+
+    private static let auxControlButtonsSubtype: Int16 = 8
+    private static let keyDownState = 0x0A00
+    private static let keyUpState = 0x0B00
+
+    /// Post one complete press (down + up) for a transport media key.
+    static func post(_ key: Int) {
+        send(key, isDown: true)
+        send(key, isDown: false)
+    }
+
+    private static func send(_ key: Int, isDown: Bool) {
+        let data1 = (key << 16) | (isDown ? keyDownState : keyUpState)
+        // UNVERIFIED: NSEvent.otherEvent construction for transport keys may behave differently
+        // than volume/brightness keys on some macOS versions.
+        guard let event = NSEvent.otherEvent(
+            with: .systemDefined,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            subtype: auxControlButtonsSubtype,
+            data1: data1,
+            data2: -1
+        ) else { return }
+        event.cgEvent?.post(tap: .cghidEventTap)
+    }
 }
