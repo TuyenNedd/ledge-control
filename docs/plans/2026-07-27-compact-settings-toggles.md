@@ -4,9 +4,9 @@
 
 **Goal:** Replace the five inline settings toggles with compact, trailing-aligned native macOS switch rows while keeping the settings window at 900×650.
 
-**Architecture:** Add one stateless SwiftUI `SettingsToggleRow` that receives a title, description, and `Binding<Bool>`. Migrate existing toggle markup to the shared row without changing model bindings or side effects, and restore the root view’s unintended local frame change to 900×650.
+**Architecture:** Add one stateless SwiftUI `SettingsToggleRow` that receives a title, description, and `Binding<Bool>`. Its native Toggle label contains the visible title and description, preserving the label click target and accessibility association while the system switch style positions the compact control at the trailing edge. Migrate existing toggle markup to the shared row without changing model bindings or side effects, and keep the root view at 900×650.
 
-**Tech Stack:** Swift 6, SwiftUI, AppKit, Swift Package Manager, macOS 14+
+**Tech Stack:** Swift 6 package tools, SwiftUI, AppKit, Swift Package Manager, macOS 14+ (the AppKit executable target intentionally uses Swift 5 language mode)
 
 ---
 
@@ -28,28 +28,24 @@ struct SettingsToggleRow: View {
     @Binding var isOn: Bool
 
     var body: some View {
-        HStack(alignment: .center, spacing: 16) {
+        Toggle(isOn: $isOn) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                 Text(description)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-
-            Spacer(minLength: 16)
-
-            Toggle(title, isOn: $isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .accessibilityLabel(title)
         }
+        .toggleStyle(.switch)
+        .controlSize(.small)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityLabel(title)
+        .accessibilityHint(description)
     }
 }
 ```
 
-The visible title and description stay on the left. The switch is native, compact, and trailing-aligned. The hidden Toggle label is restored as an explicit accessibility label.
+The visible title and description form the native Toggle label, so the label remains clickable and VoiceOver receives one control with a title and descriptive hint. The system switch is compact and trailing-aligned.
 
 **Step 2: Compile the new component**
 

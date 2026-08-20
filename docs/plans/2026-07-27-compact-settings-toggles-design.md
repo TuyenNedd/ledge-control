@@ -13,7 +13,7 @@ Make the settings toggles feel closer to macOS System Settings without shrinking
 
 ## Chosen design
 
-Add one reusable `SettingsToggleRow` for all five settings toggles. Each row uses a full-width horizontal layout with a leading title and description, flexible spacing, and a trailing label-hidden native switch. The switch uses `.toggleStyle(.switch)` and `.controlSize(.small)` for compact macOS-native metrics.
+Add one reusable `SettingsToggleRow` for all five settings toggles. Each row uses a full-width native `Toggle` whose label contains the leading title and description; the switch remains trailing-aligned by the system style. The switch uses `.toggleStyle(.switch)` and `.controlSize(.small)` for compact macOS-native metrics. Keeping the visible text inside the native label preserves the full label click target and associates the description with the control.
 
 Replace the duplicated toggle-plus-caption markup in General, Behavior, and Gesture settings with this row while retaining their existing bindings. Restore the unintended local `SettingsView` frame change from 680×500 to 900×650; leave the native 900×650 window and its resizable style unchanged.
 
@@ -29,7 +29,7 @@ Replace the duplicated toggle-plus-caption markup in General, Behavior, and Gest
 
 ## Accessibility and error handling
 
-The switch retains the title as its accessibility label even though the visible switch label is hidden. Existing model-level error handling remains unchanged, including restoring Launch at Login state if registration fails.
+The visible title and description stay inside the native Toggle label, preserving the full label click target and exposing one accessible control with a title and descriptive hint. Existing model-level error handling remains unchanged, including restoring Launch at Login state if registration fails.
 
 ## Verification
 
