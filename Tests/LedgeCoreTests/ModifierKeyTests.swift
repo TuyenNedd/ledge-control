@@ -10,7 +10,6 @@ func modifierNotHeldPreventsEngagement() {
     var settings = GestureSettings()
     settings.modifierKeyRequired = .holdOption
     var engine = GestureEngine(settings: settings)
-    // Modifier is not held, so the gesture should not arm or engage.
     _ = engine.process(frame: frame(0.0, 0.98, 0.40))
     let events = engine.process(frame: frame(0.05, 0.98, 0.45))
     #expect(events.isEmpty)
@@ -24,7 +23,7 @@ func modifierHeldAllowsGesture() {
     _ = engine.setModifierHeld(true)
     _ = engine.process(frame: frame(0.0, 0.98, 0.40))
     let events = engine.process(frame: frame(0.05, 0.98, 0.45))
-    #expect(events.first == .engaged(.volume))
+    #expect(events.first == .engaged(.right, .volume))
 }
 
 @Test("releasing modifier mid-gesture disengages")
@@ -35,10 +34,9 @@ func releasingModifierMidGestureDisengages() {
     _ = engine.setModifierHeld(true)
     _ = engine.process(frame: frame(0.0, 0.98, 0.40))
     let engaged = engine.process(frame: frame(0.05, 0.98, 0.45))
-    #expect(engaged.first == .engaged(.volume))
-    // Now release the modifier mid-gesture.
+    #expect(engaged.first == .engaged(.right, .volume))
     let events = engine.setModifierHeld(false)
-    #expect(events == [.disengaged(.volume)])
+    #expect(events == [.disengaged(.right)])
 }
 
 @Test("mode .none ignores modifier state entirely")
@@ -46,10 +44,9 @@ func modeNoneIgnoresModifierState() {
     var settings = GestureSettings()
     settings.modifierKeyRequired = .none
     var engine = GestureEngine(settings: settings)
-    // Even without calling setModifierHeld, gestures should work normally.
     _ = engine.process(frame: frame(0.0, 0.98, 0.40))
     let events = engine.process(frame: frame(0.05, 0.98, 0.45))
-    #expect(events.first == .engaged(.volume))
+    #expect(events.first == .engaged(.right, .volume))
 }
 
 @Test("mode .none ignores setModifierHeld(false) during a gesture")
@@ -59,8 +56,7 @@ func modeNoneDoesNotDisengageOnModifierRelease() {
     var engine = GestureEngine(settings: settings)
     _ = engine.process(frame: frame(0.0, 0.98, 0.40))
     let engaged = engine.process(frame: frame(0.05, 0.98, 0.45))
-    #expect(engaged.first == .engaged(.volume))
-    // Reporting modifier released should do nothing when mode is .none.
+    #expect(engaged.first == .engaged(.right, .volume))
     let events = engine.setModifierHeld(false)
     #expect(events.isEmpty)
 }

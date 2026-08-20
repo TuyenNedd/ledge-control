@@ -4,82 +4,231 @@ import Testing
 // only place a missing `public` can be caught.
 import LedgeCore
 
-@Test("x within the band classifies as an edge, the middle does not")
-func edgeClassification() {
-    let s = GestureSettings()
-    #expect(s.edge(forX: 0.02) == .left)
-    #expect(s.edge(forX: 0.98) == .right)
-    #expect(s.edge(forX: 0.5) == nil)
+// MARK: - EdgeAction enum
+
+@Test("EdgeAction conforms to CaseIterable with all expected cases")
+func edgeActionCaseIterable() {
+    let cases = EdgeAction.allCases
+    #expect(cases.count == 6)
+    #expect(cases.contains(.volume))
+    #expect(cases.contains(.brightness))
+    #expect(cases.contains(.zoom))
+    #expect(cases.contains(.nextPreviousTrack))
+    #expect(cases.contains(.scroll))
+    #expect(cases.contains(.none))
 }
 
-@Test("the band is exactly edgeBandWidth wide, open at its inner boundary")
-func edgeBandBoundary() {
-    let s = GestureSettings()
-    // Pins the default width behaviourally: 0.02 is inside a 0.025 band, 0.03 is not. A
-    // hardcoded or mistyped width fails one of these.
-    #expect(s.edge(forX: 0.02) == .left)
-    #expect(s.edge(forX: 0.03) == nil)
-    // Mirrored on the right: 0.98 is inside the outer 0.025, 0.97 is not.
-    #expect(s.edge(forX: 0.98) == .right)
-    #expect(s.edge(forX: 0.97) == nil)
-    // The inner boundary itself is outside the band, on both sides.
-    #expect(s.edge(forX: s.edgeBandWidth) == nil)
-    #expect(s.edge(forX: 1 - s.edgeBandWidth) == nil)
-    // The outer limit is inside it.
-    #expect(s.edge(forX: 0) == .left)
-    #expect(s.edge(forX: 1) == .right)
+@Test("EdgeAction displayName returns human-readable labels")
+func edgeActionDisplayNames() {
+    #expect(EdgeAction.volume.displayName == "Volume")
+    #expect(EdgeAction.brightness.displayName == "Brightness")
+    #expect(EdgeAction.zoom.displayName == "Zoom")
+    #expect(EdgeAction.nextPreviousTrack.displayName == "Next/Previous Track")
+    #expect(EdgeAction.scroll.displayName == "Scroll")
+    #expect(EdgeAction.none.displayName == "None")
 }
 
-@Test("widening the band classifies x that a narrower band rejected")
-func edgeBandWidthIsRespected() {
+// MARK: - EdgeConfig defaults
+
+@Test("EdgeConfig defaults to none action, 0.025 band, disabled")
+func edgeConfigDefaults() {
+    let config = EdgeConfig()
+    #expect(config.action == .none)
+    #expect(config.bandWidth == 0.025)
+    #expect(config.isEnabled == false)
+}
+
+@Test("EdgeConfig can be constructed with custom values")
+func edgeConfigCustom() {
+    let config = EdgeConfig(action: .volume, bandWidth: 0.05, isEnabled: true)
+    #expect(config.action == .volume)
+    #expect(config.bandWidth == 0.05)
+    #expect(config.isEnabled == true)
+}
+
+// MARK: - GestureSettings per-edge defaults
+
+@Test("left edge defaults to brightness, 0.025 band, enabled")
+func leftEdgeDefaults() {
+    let s = GestureSettings()
+    #expect(s.leftEdge.action == .brightness)
+    #expect(s.leftEdge.bandWidth == 0.025)
+    #expect(s.leftEdge.isEnabled == true)
+}
+
+@Test("right edge defaults to volume, 0.025 band, enabled")
+func rightEdgeDefaults() {
+    let s = GestureSettings()
+    #expect(s.rightEdge.action == .volume)
+    #expect(s.rightEdge.bandWidth == 0.025)
+    #expect(s.rightEdge.isEnabled == true)
+}
+
+@Test("top edge defaults to none, 0.025 band, disabled")
+func topEdgeDefaults() {
+    let s = GestureSettings()
+    #expect(s.topEdge.action == .none)
+    #expect(s.topEdge.bandWidth == 0.025)
+    #expect(s.topEdge.isEnabled == false)
+}
+
+@Test("bottom edge defaults to none, 0.025 band, disabled")
+func bottomEdgeDefaults() {
+    let s = GestureSettings()
+    #expect(s.bottomEdge.action == .none)
+    #expect(s.bottomEdge.bandWidth == 0.025)
+    #expect(s.bottomEdge.isEnabled == false)
+}
+
+// MARK: - edge(forPosition:) basic classification
+
+@Test("x within the left band classifies as left edge")
+func leftEdgeClassification() {
+    let s = GestureSettings()
+    let edge = s.edge(forPosition: NormalizedPoint(x: 0.02, y: 0.5))
+    #expect(edge == .left)
+}
+
+@Test("x within the right band classifies as right edge")
+func rightEdgeClassification() {
+    let s = GestureSettings()
+    let edge = s.edge(forPosition: NormalizedPoint(x: 0.98, y: 0.5))
+    #expect(edge == .right)
+}
+
+@Test("position in the middle classifies as nil")
+func middleClassification() {
+    let s = GestureSettings()
+    let edge = s.edge(forPosition: NormalizedPoint(x: 0.5, y: 0.5))
+    #expect(edge == nil)
+}
+
+@Test("y near the top classifies as top edge when enabled")
+func topEdgeClassification() {
     var s = GestureSettings()
-    #expect(s.edge(forX: 0.04) == nil)
-    #expect(s.edge(forX: 0.96) == nil)
-    s.edgeBandWidth = 0.05
-    #expect(s.edge(forX: 0.04) == .left)
-    #expect(s.edge(forX: 0.96) == .right)
+    s.topEdge.isEnabled = true
+    let edge = s.edge(forPosition: NormalizedPoint(x: 0.5, y: 0.98))
+    #expect(edge == .top)
 }
 
-@Test("a zero-width band classifies nothing, not even the outermost x")
+@Test("y near the bottom classifies as bottom edge when enabled")
+func bottomEdgeClassification() {
+    var s = GestureSettings()
+    s.bottomEdge.isEnabled = true
+    let edge = s.edge(forPosition: NormalizedPoint(x: 0.5, y: 0.02))
+    #expect(edge == .bottom)
+}
+
+// MARK: - Band boundaries
+
+@Test("the left band is exactly bandWidth wide, open at its inner boundary")
+func leftBandBoundary() {
+    let s = GestureSettings()
+    #expect(s.edge(forPosition: NormalizedPoint(x: 0.02, y: 0.5)) == .left)
+    #expect(s.edge(forPosition: NormalizedPoint(x: 0.03, y: 0.5)) == nil)
+    // The inner boundary itself is outside the band.
+    #expect(s.edge(forPosition: NormalizedPoint(x: s.leftEdge.bandWidth, y: 0.5)) == nil)
+    // The outer limit is inside it.
+    #expect(s.edge(forPosition: NormalizedPoint(x: 0, y: 0.5)) == .left)
+}
+
+@Test("the right band is exactly bandWidth wide, open at its inner boundary")
+func rightBandBoundary() {
+    let s = GestureSettings()
+    #expect(s.edge(forPosition: NormalizedPoint(x: 0.98, y: 0.5)) == .right)
+    #expect(s.edge(forPosition: NormalizedPoint(x: 0.97, y: 0.5)) == nil)
+    #expect(s.edge(forPosition: NormalizedPoint(x: 1 - s.rightEdge.bandWidth, y: 0.5)) == nil)
+    #expect(s.edge(forPosition: NormalizedPoint(x: 1, y: 0.5)) == .right)
+}
+
+// MARK: - Per-edge bandWidth
+
+@Test("widening a single edge's band classifies x that a narrower band rejected")
+func perEdgeBandWidthIsRespected() {
+    var s = GestureSettings()
+    #expect(s.edge(forPosition: NormalizedPoint(x: 0.04, y: 0.5)) == nil)
+    s.leftEdge.bandWidth = 0.05
+    #expect(s.edge(forPosition: NormalizedPoint(x: 0.04, y: 0.5)) == .left)
+    // Right edge still has the original width
+    #expect(s.edge(forPosition: NormalizedPoint(x: 0.96, y: 0.5)) == nil)
+}
+
+@Test("a zero-width band classifies nothing")
 func zeroWidthBandDisablesClassification() {
     var s = GestureSettings()
-    s.edgeBandWidth = 0
-    #expect(s.edge(forX: 0) == nil)
-    #expect(s.edge(forX: 1) == nil)
-    #expect(s.edge(forX: 0.5) == nil)
+    s.leftEdge.bandWidth = 0
+    s.rightEdge.bandWidth = 0
+    #expect(s.edge(forPosition: NormalizedPoint(x: 0, y: 0.5)) == nil)
+    #expect(s.edge(forPosition: NormalizedPoint(x: 1, y: 0.5)) == nil)
 }
 
-@Test("bands wider than half resolve to the nearer edge instead of overlapping")
-func overlappingBandsResolveToNearerEdge() {
+// MARK: - Disabled edges
+
+@Test("a disabled edge never classifies")
+func disabledEdgeNeverClassifies() {
     var s = GestureSettings()
-    s.edgeBandWidth = 0.6
-    // 0.45 lies in both bands; it is nearer the left, so left wins.
-    #expect(s.edge(forX: 0.45) == .left)
-    #expect(s.edge(forX: 0.55) == .right)
-    // The midpoint is equidistant; the tie is resolved deterministically to the left.
-    #expect(s.edge(forX: 0.5) == .left)
+    s.leftEdge.isEnabled = false
+    #expect(s.edge(forPosition: NormalizedPoint(x: 0.02, y: 0.5)) == nil)
+    // Right is still enabled
+    #expect(s.edge(forPosition: NormalizedPoint(x: 0.98, y: 0.5)) == .right)
 }
 
-@Test("left edge is brightness and right edge is volume by default")
-func defaultControlMapping() {
+@Test("disabled top edge does not classify even when position is in band")
+func disabledTopEdge() {
     let s = GestureSettings()
-    #expect(s.control(for: .left) == .brightness)
-    #expect(s.control(for: .right) == .volume)
+    // top is disabled by default
+    #expect(s.edge(forPosition: NormalizedPoint(x: 0.5, y: 0.99)) == nil)
 }
 
-@Test("swapSides inverts the control mapping")
-func swappedControlMapping() {
+// MARK: - Priority: vertical edges win over horizontal in corners
+
+@Test("vertical edge wins over horizontal in a corner")
+func verticalEdgePriorityInCorner() {
     var s = GestureSettings()
-    s.swapSides = true
-    #expect(s.control(for: .left) == .volume)
-    #expect(s.control(for: .right) == .brightness)
+    s.topEdge.isEnabled = true
+    s.bottomEdge.isEnabled = true
+    // Position in both left band AND top band: left (vertical) wins
+    let edge = s.edge(forPosition: NormalizedPoint(x: 0.02, y: 0.98))
+    #expect(edge == .left)
+    // Position in both right band AND bottom band: right (vertical) wins
+    let edge2 = s.edge(forPosition: NormalizedPoint(x: 0.98, y: 0.02))
+    #expect(edge2 == .right)
 }
+
+// MARK: - Overlapping bands
+
+@Test("overlapping vertical bands resolve to the nearer edge")
+func overlappingVerticalBandsResolveToNearerEdge() {
+    var s = GestureSettings()
+    s.leftEdge.bandWidth = 0.6
+    s.rightEdge.bandWidth = 0.6
+    #expect(s.edge(forPosition: NormalizedPoint(x: 0.45, y: 0.5)) == .left)
+    #expect(s.edge(forPosition: NormalizedPoint(x: 0.55, y: 0.5)) == .right)
+    // Tie goes to left
+    #expect(s.edge(forPosition: NormalizedPoint(x: 0.5, y: 0.5)) == .left)
+}
+
+// MARK: - edgeConfig(for:) helper
+
+@Test("edgeConfig returns the correct config for each edge")
+func edgeConfigForEdge() {
+    var s = GestureSettings()
+    s.leftEdge.action = .zoom
+    s.rightEdge.action = .scroll
+    s.topEdge.action = .nextPreviousTrack
+    s.bottomEdge.action = .brightness
+    #expect(s.edgeConfig(for: .left).action == .zoom)
+    #expect(s.edgeConfig(for: .right).action == .scroll)
+    #expect(s.edgeConfig(for: .top).action == .nextPreviousTrack)
+    #expect(s.edgeConfig(for: .bottom).action == .brightness)
+}
+
+// MARK: - effectiveStepDistance
 
 @Test("fine control steps at exactly the configured step distance")
 func fineStepDistance() {
     var s = GestureSettings()
     #expect(s.effectiveStepDistance == s.stepDistance)
-    // Not a constant in disguise: retuning stepDistance retunes the effective distance.
     s.stepDistance = 0.05
     #expect(s.effectiveStepDistance == 0.05)
 }
@@ -87,10 +236,6 @@ func fineStepDistance() {
 @Test("one full-height slide spans the control's whole range, fine or coarse")
 func fullHeightSlideSpansTheRange() {
     var s = GestureSettings()
-    // The reason stepDistance is 0.016 rather than any other number: a slide from the bottom
-    // of the trackpad to the top should cover the 64 sub-steps fine mode offers, and the 16
-    // whole steps coarse mode offers — once, not four times and not a quarter of the way.
-    // Ranges rather than equalities, because the tuning is an approximation of 1/64.
     let fineSteps = 1.0 / s.effectiveStepDistance
     #expect(fineSteps > 56 && fineSteps < 72)
     s.fineControl = false
@@ -106,39 +251,19 @@ func coarseStepDistance() {
     #expect(s.effectiveStepDistance == fine * 4)
 }
 
-
-@Test("out-of-range x classifies as the edge it is beyond")
-func outOfRangeXClassifiesAsTheNearerEdge() {
-    let s = GestureSettings()
-    // `NormalizedPoint` deliberately does not clamp, so an adapter bug can deliver x outside
-    // 0...1. The documented contract is that such a value still resolves to the edge it has
-    // overshot rather than to `nil`: a gesture already in progress must not evaporate because
-    // one frame reported 1.02. Pinned here because a `>= 0 && < width` style rewrite of
-    // `edge(forX:)` would silently break it while every in-range test stayed green.
-    #expect(s.edge(forX: -0.5) == .left)
-    #expect(s.edge(forX: 1.5) == .right)
-}
+// MARK: - Relationship invariants
 
 @Test("drift tolerance stays narrower than the band it is a tolerance for")
 func driftToleranceIsNarrowerThanTheBand() {
     let s = GestureSettings()
-    // `maxDriftOutsideBand` only has meaning as a margin *around* the band. If it were the
-    // wider of the two, the reachable area outside the band would exceed the band itself and
-    // "started at the edge" would stop being the thing that defines the gesture — a finger
-    // could spend most of a stroke in the middle of the trackpad and still be driving a
-    // control. The band must remain the dominant term.
-    #expect(s.maxDriftOutsideBand < s.edgeBandWidth)
+    #expect(s.maxDriftOutsideBand < s.leftEdge.bandWidth)
+    #expect(s.maxDriftOutsideBand < s.rightEdge.bandWidth)
     #expect(s.maxDriftOutsideBand > 0)
 }
 
 @Test("a stale gesture expires sooner than the typing lockout releases")
 func gestureTimeoutExpiresBeforeTypingLockout() {
     let s = GestureSettings()
-    // These two windows both end a gesture, and their order decides which one is ever the
-    // cause. If a gesture could outlive the typing lockout, then a gesture interrupted by a
-    // keystroke would already have timed out by the time the lockout expired, and the lockout
-    // could never be the thing that released — it would be dead configuration. Keeping the
-    // timeout the shorter of the two makes the lockout a real, observable window.
     #expect(s.gestureTimeout < s.typingLockout)
     #expect(s.gestureTimeout > 0)
 }
@@ -146,12 +271,6 @@ func gestureTimeoutExpiresBeforeTypingLockout() {
 @Test("the dead zone costs at least one step and at most a couple")
 func deadZoneIsMeasuredInSteps() {
     let s = GestureSettings()
-    // The dead zone is travel the user spends with no feedback, so its only meaningful unit is
-    // steps, not trackpad fractions. At least one step must be due the moment the gesture
-    // engages, or recognition is followed by another stretch of nothing (see the
-    // `activationDistance` doc comment). Fewer than a few steps, or the gesture stops feeling
-    // immediate — a dead zone of half the trackpad would satisfy the lower bound and be
-    // unusable.
     let stepsSpentArming = s.activationDistance / s.effectiveStepDistance
     #expect(stepsSpentArming >= 1)
     #expect(stepsSpentArming < 3)
@@ -160,9 +279,12 @@ func deadZoneIsMeasuredInSteps() {
 @Test("the bottom-quarter restriction ships off")
 func bottomQuarterRestrictionShipsOff() {
     let s = GestureSettings()
-    // Asserted as policy, not as a literal: DESIGN.md commits to shipping the strongest and
-    // most restrictive false-positive defence *disabled*, so that it is switched on in
-    // response to evidence rather than imposed before any exists. Flipping the default is a
-    // product decision, and this test is the thing that makes it a deliberate one.
     #expect(s.bottomQuarterOnly == false)
+}
+
+@Test("out-of-range x classifies as the edge it is beyond")
+func outOfRangeXClassifiesAsTheNearerEdge() {
+    let s = GestureSettings()
+    #expect(s.edge(forPosition: NormalizedPoint(x: -0.5, y: 0.5)) == .left)
+    #expect(s.edge(forPosition: NormalizedPoint(x: 1.5, y: 0.5)) == .right)
 }
