@@ -15,12 +15,14 @@ struct BehaviorSettingsTab: View {
                 .textCase(.uppercase)
 
             Toggle("Freeze Cursor During Gesture", isOn: $viewModel.cursorFreezeEnabled)
+                .toggleStyle(.switch)
             Text("Keep the mouse pointer still while sliding the edge.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .padding(.leading, 20)
 
             Toggle("Bottom Quarter Only", isOn: $viewModel.bottomQuarterOnly)
+                .toggleStyle(.switch)
                 .padding(.top, 8)
             Text("Only detect gestures in the bottom quarter of the trackpad.")
                 .font(.caption)

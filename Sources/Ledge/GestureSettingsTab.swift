@@ -69,6 +69,7 @@ struct GestureSettingsTab: View {
                 .padding(.top, 24)
 
             Toggle("Fine Control", isOn: $viewModel.fineControl)
+                .toggleStyle(.switch)
             Text("Use smaller volume/brightness steps for precise adjustments.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
