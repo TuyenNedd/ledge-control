@@ -3,10 +3,10 @@ import ServiceManagement
 import LedgeCore
 import UniformTypeIdentifiers
 
-/// The root SwiftUI view for the Settings window, using a sidebar with grouped sections.
+/// The root SwiftUI view for the Settings window, using a fixed, full-height sidebar.
 ///
-/// The sidebar toggle button is removed via `.navigationSplitViewStyle(.balanced)` to provide
-/// a cleaner appearance without the collapsible sidebar affordance.
+/// A fixed layout intentionally avoids `NavigationSplitView`, whose collapsible sidebar adds
+/// a system Show/Hide Sidebar toolbar button on some macOS versions.
 struct SettingsView: View {
     var viewModel: SettingsViewModel
 
@@ -20,7 +20,7 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
             List(selection: $selectedTab) {
                 Label("General", systemImage: "gearshape")
                     .tag(SettingsTab.general)
@@ -38,8 +38,10 @@ struct SettingsView: View {
                 }
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 220)
-        } detail: {
+            .frame(width: 200)
+
+            Divider()
+
             ScrollView {
                 switch selectedTab {
                 case .general:
@@ -52,11 +54,8 @@ struct SettingsView: View {
                     AboutTab()
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        // Remove the sidebar toggle button. .balanced alone may not remove it on macOS 26;
-        // .toolbar(removing:) is the explicit approach.
-        .navigationSplitViewStyle(.balanced)
-        .toolbar(removing: .sidebarToggle)
         .frame(width: 900, height: 650)
     }
 }
