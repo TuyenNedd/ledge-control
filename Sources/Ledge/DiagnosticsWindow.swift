@@ -147,11 +147,9 @@ final class DiagnosticsWindow: NSObject, NSWindowDelegate {
     }
 
     private func describeEngine() -> String {
-        guard let control = controller.engagedControl else { return "idle" }
-        switch control {
-        case .volume: return "engaged — volume"
-        case .brightness: return "engaged — brightness"
-        }
+        guard let edge = controller.engagedEdge,
+              let action = controller.engagedAction else { return "idle" }
+        return "engaged — \(edge) — \(action.displayName)"
     }
 
     private func yesNo(_ value: Bool) -> String {

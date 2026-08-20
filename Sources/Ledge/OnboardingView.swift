@@ -48,11 +48,11 @@ struct OnboardingView: View {
     @State private var previousStepCount = 0
 
     private var leftLabel: String {
-        preferences.gestureSettings.swapSides ? "Volume" : "Brightness"
+        preferences.gestureSettings.leftEdge.action.displayName
     }
 
     private var rightLabel: String {
-        preferences.gestureSettings.swapSides ? "Brightness" : "Volume"
+        preferences.gestureSettings.rightEdge.action.displayName
     }
 
     private var instructionText: String {
@@ -218,8 +218,8 @@ struct OnboardingView: View {
                 // Trackpad preview with arrow hint
                 ZStack(alignment: .trailing) {
                     TrackpadPreviewView(
-                        edgeBandWidth: .constant(preferences.gestureSettings.edgeBandWidth),
-                        swapSides: preferences.gestureSettings.swapSides,
+                        edgeBandWidth: .constant(preferences.gestureSettings.leftEdge.bandWidth),
+                        swapSides: false,
                         engagedEdge: engagedEdge
                     )
 
@@ -317,11 +317,12 @@ struct OnboardingView: View {
             if engaged {
                 // Determine which edge based on touch position
                 if let pos = touchPositionProvider() {
-                    let bandWidth = preferences.gestureSettings.edgeBandWidth
-                    if pos.x < bandWidth {
+                    let leftBandWidth = preferences.gestureSettings.leftEdge.bandWidth
+                    let rightBandWidth = preferences.gestureSettings.rightEdge.bandWidth
+                    if pos.x < leftBandWidth {
                         engagedEdge = "left"
                         hasUsedLeft = true
-                    } else if pos.x > (1.0 - bandWidth) {
+                    } else if pos.x > (1.0 - rightBandWidth) {
                         engagedEdge = "right"
                         hasUsedRight = true
                     }

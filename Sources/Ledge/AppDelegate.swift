@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     guard let pos = controller?.lastFrame?.touches.first?.position else { return nil }
                     return (x: pos.x, y: pos.y)
                 },
-                isEngagedProvider: { [weak controller] in controller?.engagedControl != nil },
+                isEngagedProvider: { [weak controller] in controller?.engagedEdge != nil },
                 volumeProvider: { [weak controller] in controller?.currentVolumeScalar() },
                 brightnessProvider: { [weak controller] in controller?.currentBrightness() }
             )

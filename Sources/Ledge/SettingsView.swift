@@ -4,6 +4,9 @@ import LedgeCore
 import UniformTypeIdentifiers
 
 /// The root SwiftUI view for the Settings window, using a sidebar with grouped sections.
+///
+/// The sidebar toggle button is removed via `.navigationSplitViewStyle(.balanced)` to provide
+/// a cleaner appearance without the collapsible sidebar affordance.
 struct SettingsView: View {
     var viewModel: SettingsViewModel
 
@@ -50,6 +53,9 @@ struct SettingsView: View {
                 }
             }
         }
+        // UNVERIFIED: .navigationSplitViewStyle(.balanced) removes the sidebar toggle on macOS 14+.
+        // If it does not, try .toolbar(removing: .sidebarToggle) instead.
+        .navigationSplitViewStyle(.balanced)
         .frame(width: 780, height: 580)
     }
 }
@@ -116,10 +122,12 @@ struct GeneralSettingsTab: View {
 /// Uses `@Observable` (macOS 14+) so that views can read properties directly without
 /// explicit `@Published` wrappers.
 ///
-/// Slider values write to `Preferences` immediately (so the trackpad preview updates in
-/// real-time), but the heavier `applyPreferences()` call is deferred to when the slider
-/// drag ends via `applyIfNeeded()`. Toggle changes apply immediately since they are
-/// discrete events.
+/// Per-edge `EdgeConfig` properties replace the old `edgeBandWidth` and `swapSides`.
+/// Each edge config change writes to preferences immediately and propagates through
+/// the interactive trackpad preview in real time.
+///
+/// All Toggle controls render as switches on macOS 14+ by default (the system style for
+/// Toggle on macOS 14+ is a switch when used outside of a Form).
 // UNVERIFIED: @Observable macro on a class with explicit didSet calling side effects.
 @Observable
 final class SettingsViewModel {
@@ -130,21 +138,31 @@ final class SettingsViewModel {
     /// but does not call `applyPreferences()`.
     var isEditingSlider: Bool = false
 
-    // MARK: - Gesture settings
+    // MARK: - Per-Edge Configuration
 
-    var edgeBandWidth: Double {
+    var leftEdge: EdgeConfig {
         didSet { writeGestureSettings(); applyIfNotEditing() }
     }
+
+    var rightEdge: EdgeConfig {
+        didSet { writeGestureSettings(); applyIfNotEditing() }
+    }
+
+    var topEdge: EdgeConfig {
+        didSet { writeGestureSettings(); applyIfNotEditing() }
+    }
+
+    var bottomEdge: EdgeConfig {
+        didSet { writeGestureSettings(); applyIfNotEditing() }
+    }
+
+    // MARK: - Gesture settings
 
     var activationDistance: Double {
         didSet { writeGestureSettings(); applyIfNotEditing() }
     }
 
     var fineControl: Bool {
-        didSet { writeGestureSettings(); applyPreferencesClosure() }
-    }
-
-    var swapSides: Bool {
         didSet { writeGestureSettings(); applyPreferencesClosure() }
     }
 
@@ -195,14 +213,21 @@ final class SettingsViewModel {
         self.applyPreferencesClosure = applyPreferences
 
         let settings = preferences.gestureSettings
-        self.edgeBandWidth = settings.edgeBandWidth
+
+        // Per-edge configuration
+        self.leftEdge = settings.leftEdge
+        self.rightEdge = settings.rightEdge
+        self.topEdge = settings.topEdge
+        self.bottomEdge = settings.bottomEdge
+
+        // Shared gesture settings
         self.activationDistance = settings.activationDistance
         self.fineControl = settings.fineControl
-        self.swapSides = settings.swapSides
         self.bottomQuarterOnly = settings.bottomQuarterOnly
         self.typingLockout = settings.typingLockout
         self.gestureTimeout = settings.gestureTimeout
 
+        // Adapter-layer settings
         self.isEnabled = preferences.isEnabled
         self.cursorFreezeEnabled = preferences.cursorFreezeEnabled
         self.useCoreAudioVolume = preferences.useCoreAudioVolume
@@ -263,13 +288,21 @@ final class SettingsViewModel {
     /// Re-read all properties from preferences. Called after import to sync the UI.
     private func reloadFromPreferences() {
         let settings = preferences.gestureSettings
-        edgeBandWidth = settings.edgeBandWidth
+
+        // Per-edge configuration
+        leftEdge = settings.leftEdge
+        rightEdge = settings.rightEdge
+        topEdge = settings.topEdge
+        bottomEdge = settings.bottomEdge
+
+        // Shared gesture settings
         activationDistance = settings.activationDistance
         fineControl = settings.fineControl
-        swapSides = settings.swapSides
         bottomQuarterOnly = settings.bottomQuarterOnly
         typingLockout = settings.typingLockout
         gestureTimeout = settings.gestureTimeout
+
+        // Adapter-layer settings
         isEnabled = preferences.isEnabled
         cursorFreezeEnabled = preferences.cursorFreezeEnabled
         useCoreAudioVolume = preferences.useCoreAudioVolume
@@ -286,13 +319,20 @@ final class SettingsViewModel {
 
     private func writeGestureSettings() {
         var settings = preferences.gestureSettings
-        settings.edgeBandWidth = edgeBandWidth
+
+        // Per-edge configuration
+        settings.leftEdge = leftEdge
+        settings.rightEdge = rightEdge
+        settings.topEdge = topEdge
+        settings.bottomEdge = bottomEdge
+
+        // Shared gesture settings
         settings.activationDistance = activationDistance
         settings.fineControl = fineControl
-        settings.swapSides = swapSides
         settings.bottomQuarterOnly = bottomQuarterOnly
         settings.typingLockout = typingLockout
         settings.gestureTimeout = gestureTimeout
+
         preferences.gestureSettings = settings
     }
 
