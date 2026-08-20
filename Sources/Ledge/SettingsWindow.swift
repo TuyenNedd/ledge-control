@@ -25,7 +25,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         let contentFrame = NSRect(x: 0, y: 0, width: 900, height: 650)
         window = NSWindow(
             contentRect: contentFrame,
-            styleMask: [.titled, .closable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
@@ -46,24 +46,45 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         // which app the user was working in.
         viewModel.previousFrontmostApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 
-        // Show app in the Dock while Settings is open. This gives us standard window behaviors:
-        // - Cmd+W to close (comes free with .regular activation policy and .closable style mask)
-        // - App icon visible in Dock for easy switching
-        // UNVERIFIED: setActivationPolicy(.regular) while already running as .accessory. The
-        // transition should be immediate but may have edge cases with window ordering.
+        // Show app in the Dock while Settings is open.
         NSApp.setActivationPolicy(.regular)
 
+        // Set up a main menu so ⌘W and traffic light buttons work.
+        // Without a menu bar, .regular activation policy still won't deliver ⌘W.
+        setupMainMenu()
+
         window.makeKeyAndOrderFront(nil)
-        // Activate to bring the window to front.
         NSApp.activate()
+    }
+
+    /// Creates a minimal main menu bar with File > Close (⌘W) so standard keyboard shortcuts
+    /// and traffic light buttons work when the app is in .regular activation policy.
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+
+        // App menu (required for the menu bar to appear)
+        let appMenuItem = NSMenuItem()
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Quit Ledge", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenuItem.submenu = appMenu
+        mainMenu.addItem(appMenuItem)
+
+        // File menu with Close
+        let fileMenuItem = NSMenuItem()
+        let fileMenu = NSMenu(title: "File")
+        fileMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        fileMenuItem.submenu = fileMenu
+        mainMenu.addItem(fileMenuItem)
+
+        NSApp.mainMenu = mainMenu
     }
 
     // MARK: - NSWindowDelegate
 
     func windowWillClose(_ notification: Notification) {
         // Hide from Dock when Settings closes, returning to menu bar-only mode.
-        // UNVERIFIED: setActivationPolicy(.accessory) while a window is closing. There may be
-        // a brief flicker of the Dock icon disappearing. Dispatching async may help if needed.
         NSApp.setActivationPolicy(.accessory)
+        // Remove the main menu so it doesn't linger after the window is gone.
+        NSApp.mainMenu = nil
     }
 }
